@@ -87,7 +87,9 @@ go build -o oqsign ./cmd/oqsign                 # ou le binaire d'oqsign livré 
    Publier à la main (outil de mise à niveau) une version qui ne grave plus la clé compromise ; les caméras qui ne l'ont pas
    reçue restent exposées jusque-là.
 
-`./oqsign pubkey -key <fichier>` réaffiche la clé publique ; `oqsign` refuse une clé privée lisible par d'autres.
+`./oqsign pubkey -key <fichier>` réaffiche la clé publique ; `oqsign` refuse une clé privée lisible par d'autres
+(Linux, macOS). Sous Windows, qui n'a pas de droits Unix, `oqsign.exe` ne peut pas le contrôler : placer le fichier dans
+un dossier réservé à son propriétaire (propriétés > Sécurité) et ne pas le synchroniser avec un nuage.
 
 ## Publier une version signée
 

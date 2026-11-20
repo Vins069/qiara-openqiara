@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -50,7 +51,7 @@ func TestKeygenKeepsPrivateKeyPrivate(t *testing.T) {
 		t.Fatalf("code %d : %s", code, errOut)
 	}
 	st, err := os.Stat(key)
-	if err != nil || st.Mode().Perm() != 0o600 {
+	if err != nil || (runtime.GOOS != "windows" && st.Mode().Perm() != 0o600) {
 		t.Fatalf("droits du fichier : %v %v", st, err)
 	}
 	raw, _ := os.ReadFile(key)
@@ -153,10 +154,6 @@ func TestSignRefusals(t *testing.T) {
 	small := filepath.Join(dir, "small")
 	os.WriteFile(small, armBinary(5, true)[:10_000], 0o755)
 
-	loose := filepath.Join(dir, "loose.oqkey")
-	raw, _ := os.ReadFile(key)
-	os.WriteFile(loose, raw, 0o644)
-
 	ok := []string{"-version", "v", "-seq", "5", "-outdir", filepath.Join(dir, "o")}
 	cases := []struct {
 		name string
@@ -171,7 +168,6 @@ func TestSignRefusals(t *testing.T) {
 		{"seq 0", []string{"sign", "-key", key, "-in", good, "-version", "v", "-seq", "0"}, "-seq"},
 		{"sans version", []string{"sign", "-key", key, "-in", good, "-seq", "5"}, "-version"},
 		{"canal invalide", append([]string{"sign", "-key", key, "-in", good, "-channel", "X Y"}, ok...), "canal"},
-		{"clé lisible par tous", append([]string{"sign", "-key", loose, "-in", good}, ok...), "lisible par d'autres"},
 		{"clé absente", append([]string{"sign", "-key", dir + "/rien", "-in", good}, ok...), "no such file"},
 		{"fichier de clé quelconque", append([]string{"sign", "-key", good, "-in", good}, ok...), "droits"},
 	}
@@ -212,5 +208,25 @@ func TestUsage(t *testing.T) {
 	}
 	if code, out, _ := oq(t, "help"); code != 0 || !strings.Contains(out, "keygen") {
 		t.Error("aide")
+	}
+}
+
+func TestSignRefusesKeyReadableByOthers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("pas de droits Unix")
+	}
+	dir, key := setup(t)
+	bin := filepath.Join(dir, "b")
+	os.WriteFile(bin, armBinary(5, true), 0o755)
+	loose := filepath.Join(dir, "loose.oqkey")
+	raw, _ := os.ReadFile(key)
+	os.WriteFile(loose, raw, 0o644)
+	os.Chmod(loose, 0o644)
+	code, _, e := oq(t, "sign", "-key", loose, "-in", bin, "-version", "v", "-seq", "5", "-outdir", dir+"/o")
+	if code == 0 || !strings.Contains(e, "lisible par d'autres") {
+		t.Errorf("code %d, erreur %q", code, e)
+	}
+	if _, err := os.Stat(dir + "/o/update.json"); err == nil {
+		t.Error("manifeste écrit avec une clé trop ouverte")
 	}
 }

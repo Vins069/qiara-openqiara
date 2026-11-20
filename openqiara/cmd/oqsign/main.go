@@ -26,6 +26,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -129,7 +130,8 @@ func loadPrivate(path string) (ed25519.PrivateKey, error) {
 	if !st.Mode().IsRegular() {
 		return nil, fmt.Errorf("%s n'est pas un fichier ordinaire", path)
 	}
-	if st.Mode().Perm()&0o077 != 0 {
+	// Windows ne porte pas de droits Unix (Go y affiche 0666) : la protection du fichier y relève des ACL du dossier.
+	if runtime.GOOS != "windows" && st.Mode().Perm()&0o077 != 0 {
 		return nil, fmt.Errorf("%s est lisible par d'autres utilisateurs (droits %o) : chmod 600 d'abord", path, st.Mode().Perm())
 	}
 	b, err := os.ReadFile(path)
