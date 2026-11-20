@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -31,6 +32,7 @@ import (
 	"github.com/caligone/openqiara/internal/publisher"
 	"github.com/caligone/openqiara/internal/qplus"
 	"github.com/caligone/openqiara/internal/rtspserver"
+	"github.com/caligone/openqiara/internal/sigupdate"
 	"github.com/caligone/openqiara/internal/videoparams"
 	"github.com/caligone/openqiara/internal/web"
 	staticweb "github.com/caligone/openqiara/web"
@@ -44,7 +46,19 @@ var (
 	version = "dev"
 	commit  = ""
 	date    = ""
+	// signedSeq : numéro (seq) de la version signée, celui du manifeste update.json qui l'annonce
+	// (-X main.signedSeq=17). « 0 » : binaire non signé, toute version signée lui est supérieure.
+	signedSeq = "0"
 )
+
+// runningSignedSeq lit signedSeq ; une valeur illisible vaut 0 (jamais « plus récent que tout »).
+func runningSignedSeq() int64 {
+	n, err := strconv.ParseInt(signedSeq, 10, 64)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
 
 // BuildInfo returns the version string shown in /api/status and the
 // -version output. Always non-empty.
@@ -513,8 +527,10 @@ func main() {
 			}
 		}
 	}
+	// La mise à jour signée est créée plus bas (elle a besoin de l'état de l'alarme) ; le diagnostic la lit ici.
+	var signedUpd atomic.Pointer[sigupdate.Updater]
 	if mqttPub != nil {
-		go serveDiagnostics(ctx, mqttPub, cam, BuildInfo(), codecState, mediaHub, diagKick, logger)
+		go serveDiagnostics(ctx, mqttPub, cam, BuildInfo(), codecState, mediaHub, &signedUpd, diagKick, logger)
 	}
 	// The camera's HomeKit motion sensor (HomeKit Secure Video's trigger)
 	// is on while anyone, person or pet, is in sight.
@@ -626,6 +642,26 @@ func main() {
 		Every:    6 * time.Hour,
 		First:    10 * time.Minute,
 	}, logger)
+
+	// Mise à jour signée (OpenQIARA Claude) : désactivée par défaut, sans effet tant qu'aucune clé de
+	// publication n'est gravée (internal/sigupdate/keys.go). Elle ne remplace jamais /data/openqiarad :
+	// elle dépose le binaire chez QIARA Plus (qp-update stage) puis demande la relance (restart-app),
+	// uniquement alarme désarmée et état connu ; l'essai, la validation et le retour arrière sont ceux de QIARA Plus.
+	su := sigupdate.NewSystem(sigupdate.SystemConfig{
+		RunningSeq: runningSignedSeq(),
+		Paths:      qplus.Default,
+		Settings: func() sigupdate.Settings {
+			c := store.Get().SignedUpdate
+			return sigupdate.Settings{Enabled: c.Enabled, Repo: c.Repo, Channel: c.Channel, Every: time.Duration(c.IntervalHours) * time.Hour}
+		},
+		Disarmed: func() bool { return getAlarmState() == string(alarm.StateDisarmed) },
+		Logger:   logger,
+	})
+	signedUpd.Store(su)
+	if webSrv != nil {
+		webSrv.SetSignedUpdate(su)
+	}
+	go su.Run(ctx)
 
 	// Alarm engine — standalone state machine for arm/disarm/triggered logic.
 	// Config provider reads night_mode from the config store on each query.

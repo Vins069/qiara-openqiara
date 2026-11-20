@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/caligone/openqiara/internal/camera"
@@ -11,6 +12,7 @@ import (
 	"github.com/caligone/openqiara/internal/nal"
 	"github.com/caligone/openqiara/internal/publisher"
 	"github.com/caligone/openqiara/internal/qplus"
+	"github.com/caligone/openqiara/internal/sigupdate"
 	"github.com/caligone/openqiara/internal/sonde"
 )
 
@@ -25,7 +27,7 @@ const diagPeriod = time.Minute
 // (the one served), and whether the two differ; kick asks for a reading
 // now (the stream's codec just changed).
 func serveDiagnostics(ctx context.Context, pub *publisher.MQTTPublisher, cam camera.Client, version string,
-	codec *nal.State, hub *mediahub.Hub, kick <-chan struct{}, logger *slog.Logger) {
+	codec *nal.State, hub *mediahub.Hub, signed *atomic.Pointer[sigupdate.Updater], kick <-chan struct{}, logger *slog.Logger) {
 	probe := sonde.New()
 	ha := pub.HAPublisher()
 	tick := time.NewTicker(diagPeriod)
@@ -54,6 +56,11 @@ func serveDiagnostics(ctx context.Context, pub *publisher.MQTTPublisher, cam cam
 		}
 		for k, v := range qplus.Default.Diag() {
 			reading[k] = v
+		}
+		if u := signed.Load(); u != nil {
+			for k, v := range signedDiag(u.Status()) {
+				reading[k] = v
+			}
 		}
 		reading["version"] = version
 		reading["mqtt_reconnects"] = ha.Reconnects()
@@ -99,4 +106,48 @@ func codecDiag(codec *nal.State, hub *mediahub.Hub) map[string]any {
 		r["video_nal"] = hub.NALCounts()
 	}
 	return r
+}
+
+// signedUpdateLabels : le résultat de la dernière vérification, en clair pour Home Assistant.
+var signedUpdateLabels = map[string]string{
+	sigupdate.ResDisabled:   "Désactivée",
+	sigupdate.ResNoKey:      "Inactive (aucune clé de publication)",
+	sigupdate.ResUpToDate:   "À jour",
+	sigupdate.ResWaiting:    "En attente (alarme, essai ou QIARA Plus)",
+	sigupdate.ResNetwork:    "Dépôt injoignable ou réponse refusée",
+	sigupdate.ResSignature:  "Signature refusée",
+	sigupdate.ResRefused:    "Version refusée",
+	sigupdate.ResInstalling: "Installation en essai",
+	sigupdate.ResInstalled:  "Installée",
+	sigupdate.ResRolledBack: "Retour arrière",
+	sigupdate.ResError:      "Erreur",
+}
+
+// signedDiag is the signed update's part of the diagnostic reading. Nothing at all while no
+// publication key is engraved in the binary (the entities do not exist then): su_result is the
+// last check's outcome, su_running_seq the signed version running (0: unsigned build),
+// su_seen_version the last signed version the repository announced, su_last_check when.
+func signedDiag(st sigupdate.Status) map[string]any {
+	if st.Keys == 0 {
+		return nil
+	}
+	out := map[string]any{"su_running_seq": st.RunningSeq}
+	if st.Result != "" {
+		if l, ok := signedUpdateLabels[st.Result]; ok {
+			out["su_result"] = l
+		} else {
+			out["su_result"] = st.Result
+		}
+	} else if st.Active {
+		out["su_result"] = "Pas encore vérifiée"
+	} else {
+		out["su_result"] = signedUpdateLabels[sigupdate.ResDisabled]
+	}
+	if st.SeenVersion != "" {
+		out["su_seen_version"] = st.SeenVersion
+	}
+	if st.LastCheck != "" {
+		out["su_last_check"] = st.LastCheck
+	}
+	return out
 }

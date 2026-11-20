@@ -73,6 +73,11 @@ var diagFields = []diagField{
 	{Key: "qp_hang_kills", Name: "Blocages corrigés", Domain: "sensor", Category: "diagnostic", Icon: "mdi:restart"},
 	{Key: "qp_last_auto_reboot", Name: "Dernier redémarrage automatique", Domain: "sensor", Category: "diagnostic", Icon: "mdi:restart-alert"},
 	{Key: "qp_bb_on", Name: "Boîte noire (enquête SSH)", Domain: "binary_sensor", DeviceClass: "running", Category: "diagnostic"},
+	// Signed update (OpenQIARA Claude): only present once a publication key is engraved in the binary.
+	{Key: "su_result", Name: "Mise à jour signée", Domain: "sensor", Category: "diagnostic", Icon: "mdi:shield-sync-outline"},
+	{Key: "su_running_seq", Name: "Version signée en service", Domain: "sensor", Category: "diagnostic", Icon: "mdi:tag-check-outline"},
+	{Key: "su_seen_version", Name: "Dernière version signée vue", Domain: "sensor", Category: "diagnostic", Icon: "mdi:tag-search-outline"},
+	{Key: "su_last_check", Name: "Dernière vérification des mises à jour signées", Domain: "sensor", DeviceClass: "timestamp", Category: "diagnostic"},
 	{Key: "video_iv_on", Name: "Détection de personnes interne", Domain: "binary_sensor", Category: "diagnostic", Icon: "mdi:account-search"},
 	{Key: "video_bitrate_kbps", Name: "Débit vidéo", Domain: "sensor", DeviceClass: "data_rate", Unit: "kbit/s", StateClass: "measurement", Category: "diagnostic"},
 	{Key: "video_gop_denum", Name: "Diviseur d'image clé", Domain: "sensor", Category: "diagnostic", Icon: "mdi:key-variant"},
