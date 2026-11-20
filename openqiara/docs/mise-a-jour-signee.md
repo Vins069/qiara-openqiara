@@ -71,7 +71,7 @@ La clé **privée** est créée et gardée par le propriétaire du dépôt, sur 
 sur la caméra, jamais dans une conversation avec Claude, jamais en argument de ligne de commande.
 
 ```sh
-go build -o oqsign ./cmd/oqsign                 # ou le binaire fourni avec la V17
+go build -o oqsign ./cmd/oqsign                 # ou le binaire d'oqsign livré à part
 ./oqsign keygen -out ~/cles/openqiara-maj.oqkey # crée le fichier en 0600, sans jamais écraser un fichier existant
 ```
 
@@ -163,4 +163,4 @@ notifie l'essai, l'installation, le retour arrière et les refus.
 | `installation` | version déposée chez QIARA Plus ; essai en cours |
 | `installee` / `retour-arriere` | issue de l'essai, constatée à la vérification suivante |
 
-Journal : lignes « mise à jour signée » dans `/data/openqiarad.log` ; côté QIARA Plus : `qp-update status`.
+Journal : lignes « mise à jour signée » du journal d'openqiarad ; côté QIARA Plus : `qp-update status`.
