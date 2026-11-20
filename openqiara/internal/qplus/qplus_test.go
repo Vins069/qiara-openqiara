@@ -291,3 +291,34 @@ func TestSSHRestartOrder(t *testing.T) {
 		t.Fatal("ssh-restart missing from the orders")
 	}
 }
+
+func TestTrialUpdateToolAndBeat(t *testing.T) {
+	dir := t.TempDir()
+	p := Paths{Run: dir + "/run", State: dir + "/qp/state", Guard: dir + "/qp/qp-guard", Proc: dir + "/proc"}
+	os.MkdirAll(p.Run, 0o755)
+	os.MkdirAll(p.State, 0o755)
+	os.MkdirAll(p.Proc, 0o755)
+	os.WriteFile(p.Proc+"/uptime", []byte("500.00 400.00\n"), 0o644)
+	if p.Trial() || p.GuardBeating() {
+		t.Fatal("essai ou gardien vus à vide")
+	}
+	os.WriteFile(p.State+"/trial", []byte("1 abc\n"), 0o644)
+	if !p.Trial() {
+		t.Error("essai non vu")
+	}
+	os.WriteFile(p.Run+"/guard_beat", []byte("490\n"), 0o644)
+	if !p.GuardBeating() {
+		t.Error("gardien vivant non vu")
+	}
+	os.WriteFile(p.Run+"/guard_beat", []byte("300\n"), 0o644)
+	if p.GuardBeating() {
+		t.Error("gardien muet depuis 200 s vu vivant")
+	}
+	os.WriteFile(p.Run+"/guard_beat", []byte("pas un nombre\n"), 0o644)
+	if p.GuardBeating() {
+		t.Error("battement illisible accepté")
+	}
+	if p.UpdateTool() != dir+"/qp/qp-update" || p.UpdateStatePath() != dir+"/qp/sigupdate.json" {
+		t.Errorf("chemins : %s %s", p.UpdateTool(), p.UpdateStatePath())
+	}
+}

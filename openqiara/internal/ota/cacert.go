@@ -34,3 +34,7 @@ func newHTTPClient(timeout time.Duration) *http.Client {
 		},
 	}
 }
+
+// NewHTTPClient est newHTTPClient pour les autres paquets de la caméra (mise
+// à jour signée) : mêmes racines de confiance embarquées.
+func NewHTTPClient(timeout time.Duration) *http.Client { return newHTTPClient(timeout) }

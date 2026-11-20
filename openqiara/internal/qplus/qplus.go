@@ -317,8 +317,7 @@ func (p Paths) Order(name string) error {
 	}
 	// The guard beats every 10 s: an order left while it is gone would wait
 	// in /tmp/qp/cmd and run whenever it comes back (a reboot hours later).
-	beat, err := strconv.ParseInt(readLine(filepath.Join(p.Run, "guard_beat")), 10, 64)
-	if age := p.uptime() - beat; err != nil || age < 0 || age > 120 {
+	if !p.GuardBeating() {
 		return ErrGuardAbsent
 	}
 	dir := filepath.Join(p.Run, "cmd")
@@ -335,6 +334,28 @@ func (p Paths) Order(name string) error {
 		return err
 	}
 	return f.Close()
+}
+
+// GuardBeating tells whether the guard has beaten within the last 2 minutes.
+func (p Paths) GuardBeating() bool {
+	beat, err := strconv.ParseInt(readLine(filepath.Join(p.Run, "guard_beat")), 10, 64)
+	age := p.uptime() - beat
+	return err == nil && age >= 0 && age <= 120
+}
+
+// Trial tells whether a trial of the slot « new » is under way (qp-update stage
+// writes the marker, promote and rollback remove it).
+func (p Paths) Trial() bool {
+	_, err := os.Stat(filepath.Join(p.State, "trial"))
+	return err == nil
+}
+
+// UpdateTool is the path of qp-update, next to the guard.
+func (p Paths) UpdateTool() string { return filepath.Join(filepath.Dir(p.Guard), "qp-update") }
+
+// UpdateStatePath is where the signed update remembers what it did (next to qp-update, on /data).
+func (p Paths) UpdateStatePath() string {
+	return filepath.Join(filepath.Dir(p.Guard), "sigupdate.json")
 }
 
 // ErrGuardAbsent: the guard has not beaten for 2 minutes, nobody would
