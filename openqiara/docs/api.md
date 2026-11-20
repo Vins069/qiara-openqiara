@@ -165,7 +165,7 @@ Le modèle assume **un seul clavier** :
 | `/api/v1/config/admin` | `{password_set}` — **jamais** le mot de passe ni son hash | `{password}` (8 caractères min., vide refusé) — `DELETE` désactive l'auth |
 | `/api/v1/config/alarm` | idem | `{mode?, alarmo_command_topic?, alarmo_state_topic?, siren_sounds?, arming_delay_seconds?, pending_delay_seconds?, wail_duration_seconds?}` |
 | `/api/v1/config/web` | `{enabled}` | `{enabled}` |
-| `/api/v1/config/update` | `{auto}` | `{auto}` |
+| `/api/v1/config/update` | `{auto}` | `{auto}` (la mise à jour signée a sa propre route, `/api/v1/update/signed`) |
 
 Contraintes validées côté serveur (`400` sinon) :
 
@@ -199,6 +199,8 @@ Notes :
 |---|---|---|
 | `GET` | `/api/v1/update` | `{current, latest, update_needed, checked_at}` |
 | `GET` | `/api/v1/update/status` | `{step, version?, progress?, bytes?, total_bytes?, error?}` |
+| `GET` | `/api/v1/update/signed` | `{enabled, repo, channel, interval_hours, available, status}` |
+| `PUT` | `/api/v1/update/signed` | corps : `enabled?`, `repo?`, `channel?`, `interval_hours?` (idem en réponse) |
 
 `503` si l'OTA n'est pas configuré (build local sans `-ldflags`), `502` si
 GitHub est injoignable.
@@ -223,6 +225,20 @@ suffisent à rejeter une bonne release : la réinstaller à la main. Tag perdu
 `/data/ota_failed`. Pendant l'essai, ou tant qu'une install attend son
 reboot, une nouvelle install répond `409` ; `scripts/deploy.sh` met fin à
 l'essai.
+
+**Mise à jour signée (OpenQIARA Claude).** `/api/v1/update/signed` règle et
+montre la mise à jour automatique propre à la distribution, qui remplace
+l'installation automatique de l'amont (`PUT /config/update {"auto":true}`
+reste refusée, `409`, sur une version « -claude » ou avec QIARA Plus). La
+caméra lit `update.json` et `update.json.sig` dans la dernière release du
+dépôt réglé (`update-<canal>.json` pour un autre canal que `stable`) et
+n'installe que ce qu'une clé de publication gravée dans le binaire a signé
+(Ed25519, `seq` strictement croissant). Le binaire n'est jamais écrit par
+openqiarad : il est déposé chez QIARA Plus (`qp-update stage`, essai,
+validation par la santé, retour arrière automatique, ordre `restart-app`).
+Désactivée par défaut ; `PUT` répond `409` pour activer tant qu'aucune clé
+n'est gravée ou que QIARA Plus manque, `400` pour un champ invalide ou un
+`repo` absent. Voir `docs/mise-a-jour-signee.md`.
 
 ---
 

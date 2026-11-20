@@ -23,15 +23,17 @@ const adminBcryptCost = 10
 
 // Config is the root configuration persisted to disk.
 type Config struct {
-	MQTT       MQTTConfig    `json:"mqtt"`
-	HomeKit    HomeKitConfig `json:"homekit"`
-	RTSP       RTSPConfig    `json:"rtsp,omitempty"`
-	Admin      AdminConfig   `json:"admin"`
-	Web        WebConfig     `json:"web"`
-	Alarm      AlarmConfig   `json:"alarm"`
-	Update     UpdateConfig  `json:"update"`
-	Sensors    []SensorEntry `json:"sensors,omitempty"`
-	DeletedIDs []int         `json:"deleted_ids,omitempty"`
+	MQTT    MQTTConfig    `json:"mqtt"`
+	HomeKit HomeKitConfig `json:"homekit"`
+	RTSP    RTSPConfig    `json:"rtsp,omitempty"`
+	Admin   AdminConfig   `json:"admin"`
+	Web     WebConfig     `json:"web"`
+	Alarm   AlarmConfig   `json:"alarm"`
+	Update  UpdateConfig  `json:"update"`
+	// SignedUpdate : mise à jour automatique signée d'OpenQIARA Claude (désactivée par défaut).
+	SignedUpdate SignedUpdateConfig `json:"signed_update,omitzero"`
+	Sensors      []SensorEntry      `json:"sensors,omitempty"`
+	DeletedIDs   []int              `json:"deleted_ids,omitempty"`
 
 	// RadioNextAddr is the radio address the next pairing gives (charmux
 	// mode). It only grows, like fbxhome's domus_next_addr: the MCU has no
@@ -168,6 +170,18 @@ type UpdateConfig struct {
 	// Auto installs the latest release on its own, only while the alarm is
 	// disarmed. Off by default.
 	Auto bool `json:"auto"`
+}
+
+// SignedUpdateConfig règle la mise à jour signée (paquet sigupdate). Sans effet tant qu'aucune
+// clé de publication n'est gravée dans le binaire, et sans QIARA Plus. Désactivée par défaut.
+type SignedUpdateConfig struct {
+	Enabled bool `json:"enabled"`
+	// Repo : « propriétaire/dépôt » GitHub dont la dernière release porte update.json et sa signature.
+	Repo string `json:"repo,omitempty"`
+	// Channel : « stable » si vide.
+	Channel string `json:"channel,omitempty"`
+	// IntervalHours : entre deux vérifications, de 6 à 168 ; 0 = 12 h.
+	IntervalHours int `json:"interval_hours,omitempty"`
 }
 
 // AlarmConfig selects the alarm operating mode and related settings.

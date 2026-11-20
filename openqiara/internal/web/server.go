@@ -22,6 +22,7 @@ import (
 	"github.com/caligone/openqiara/internal/config"
 	"github.com/caligone/openqiara/internal/mqtt"
 	"github.com/caligone/openqiara/internal/ota"
+	"github.com/caligone/openqiara/internal/sigupdate"
 )
 
 // MQTTCallbacks allows the web server to trigger publisher updates on sensor changes.
@@ -106,6 +107,7 @@ type Server struct {
 	// 503 (pas configuré en build local sans -ldflags).
 	otaClient    *ota.Client
 	otaInstaller *ota.Installer
+	signed       *sigupdate.Updater
 }
 
 // listSensors returns the paired sensors with their live state.
@@ -164,6 +166,9 @@ func (s *Server) SetHLS(h http.Handler) {
 func (s *Server) SetVersion(v string) {
 	s.version = v
 }
+
+// SetSignedUpdate attache la mise à jour signée (API /api/v1/update/signed).
+func (s *Server) SetSignedUpdate(u *sigupdate.Updater) { s.signed = u }
 
 // SetOTA attache le client GitHub Releases et l'installer. Si non
 // appelé, les endpoints /api/update/* renvoient 503.
@@ -268,6 +273,8 @@ func (s *Server) routes() (*http.ServeMux, error) {
 	mux.HandleFunc("GET /api/v1/alarm", s.cors(s.handleGetAlarm))
 	mux.HandleFunc("GET /api/v1/update", s.cors(s.handleUpdateCheck))
 	mux.HandleFunc("GET /api/v1/update/status", s.cors(s.handleUpdateStatus))
+	mux.HandleFunc("GET /api/v1/update/signed", s.cors(s.handleGetSignedUpdate))
+	mux.HandleFunc("PUT /api/v1/update/signed", s.cors(s.handlePutSignedUpdate))
 
 	// Commandes — 200 = accepté, pas effectué.
 	mux.HandleFunc("POST /api/v1/commands/alarm", s.cors(s.handleSetAlarm))

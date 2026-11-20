@@ -1401,6 +1401,128 @@
         }
       }
     },
+    "/api/v1/update/signed": {
+      "get": {
+        "tags": [
+          "Mise à jour"
+        ],
+        "summary": "Lire la mise à jour signée",
+        "operationId": "getSignedUpdate",
+        "description": "Réglages et état de la mise à jour automatique signée d'OpenQIARA Claude (désactivée par défaut). Sans clé de publication gravée dans le binaire ou sans QIARA Plus, `available` est faux et rien n'est jamais installé.",
+        "responses": {
+          "200": {
+            "description": "Réglages, disponibilité et dernier état.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedUpdate"
+                },
+                "examples": {
+                  "inactive": {
+                    "summary": "Livrée, désactivée, sans clé gravée",
+                    "value": {
+                      "enabled": false,
+                      "repo": "",
+                      "channel": "stable",
+                      "interval_hours": 12,
+                      "available": false,
+                      "status": {
+                        "active": false,
+                        "keys": 0,
+                        "running_seq": 0,
+                        "result": "pas-de-cle"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "description": "Mise à jour signée non configurée sur cette compilation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Mise à jour"
+        ],
+        "summary": "Régler la mise à jour signée",
+        "operationId": "updateSignedUpdate",
+        "description": "Champs absents : inchangés. Pris en compte à la prochaine vérification (au plus une vérification toutes les 6 h, la première 15 min après le démarrage), sans redémarrage. Cette route n'installe rien : seule la vérification périodique, alarme désarmée et sans essai en cours, dépose une version signée chez QIARA Plus. L'installation automatique de l'amont (`PUT /api/v1/config/update`) reste refusée (409) sur une version OpenQIARA Claude.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedUpdatePatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Enregistré, réglages relus.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedUpdate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "JSON malformé, champ inconnu, aucun champ, dépôt/canal/intervalle invalide, ou `repo` absent pour activer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Activation impossible : aucune clé de publication gravée dans ce binaire, ou QIARA Plus non installé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Mise à jour signée non configurée sur cette compilation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/commands/alarm": {
       "post": {
         "tags": [
@@ -3143,6 +3265,130 @@
             "examples": [
               "v0.1.0-rc.11"
             ]
+          }
+        }
+      },
+      "SignedUpdate": {
+        "type": "object",
+        "description": "Mise à jour signée : réglages, disponibilité et état. La version à installer est annoncée par `update.json` (signé Ed25519, `seq` strictement croissant) dans la dernière release du dépôt réglé ; le binaire est déposé chez QIARA Plus (essai, validation par la santé, retour arrière automatique).",
+        "required": [
+          "enabled",
+          "repo",
+          "channel",
+          "interval_hours",
+          "available",
+          "status"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "repo": {
+            "type": "string",
+            "description": "`propriétaire/dépôt` GitHub. Vide tant qu'il n'est pas réglé."
+          },
+          "channel": {
+            "type": "string",
+            "default": "stable",
+            "description": "Nom du manifeste : `update.json` pour `stable`, `update-<canal>.json` sinon."
+          },
+          "interval_hours": {
+            "type": "integer",
+            "default": 12,
+            "minimum": 6,
+            "maximum": 168
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Au moins une clé de publication est gravée dans le binaire ET QIARA Plus est installé."
+          },
+          "status": {
+            "$ref": "#/components/schemas/SignedUpdateStatus"
+          }
+        }
+      },
+      "SignedUpdatePatch": {
+        "type": "object",
+        "description": "Au moins un champ. Activer (`enabled: true`) exige `available` et un `repo`.",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "repo": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+          },
+          "channel": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,15}$"
+          },
+          "interval_hours": {
+            "type": "integer",
+            "description": "0 (12 h) ou de 6 à 168.",
+            "minimum": 0,
+            "maximum": 168
+          }
+        }
+      },
+      "SignedUpdateStatus": {
+        "type": "object",
+        "required": [
+          "active",
+          "keys",
+          "running_seq"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "Activée et au moins une clé gravée."
+          },
+          "keys": {
+            "type": "integer",
+            "description": "Nombre de clés de publication gravées dans le binaire."
+          },
+          "running_seq": {
+            "type": "integer",
+            "description": "`seq` de la version signée qui tourne (0 : binaire non signé)."
+          },
+          "last_check": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "desactivee",
+              "pas-de-cle",
+              "a-jour",
+              "attente",
+              "echec-reseau",
+              "echec-signature",
+              "refusee",
+              "installation",
+              "installee",
+              "retour-arriere",
+              "erreur"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "seen_seq": {
+            "type": "integer",
+            "description": "Dernier `seq` signé vu dans le dépôt."
+          },
+          "seen_version": {
+            "type": "string"
+          },
+          "pending_seq": {
+            "type": "integer",
+            "description": "Version déposée chez QIARA Plus, en essai."
+          },
+          "failed_seq": {
+            "type": "integer",
+            "description": "Plus grand `seq` revenu en arrière : jamais réessayé."
           }
         }
       }
