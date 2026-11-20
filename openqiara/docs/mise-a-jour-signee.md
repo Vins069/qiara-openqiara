@@ -12,7 +12,7 @@ ajouts de la distribution et le lanceur de QIARA Plus.
 ## Ce qui se passe
 
 1. Toutes les 12 h par défaut (6 h au minimum, 7 jours au maximum), la première vérification 15 minutes après le
-   démarrage, `openqiarad` lit dans la **dernière release** du dépôt réglé (`update.signed.repo`) deux petits fichiers :
+   démarrage, `openqiarad` lit dans la **dernière release** du dépôt réglé (`signed_update.repo`) deux petits fichiers :
    `update.json` et `update.json.sig` (pour un autre canal que `stable` : `update-<canal>.json`). Adresse :
    `https://github.com/<dépôt>/releases/latest/download/<fichier>`. Pas l'API GitHub (pas de limite de requêtes).
 2. Il contrôle la signature Ed25519 avec les clés gravées dans le binaire, puis le manifeste. Signature fausse :

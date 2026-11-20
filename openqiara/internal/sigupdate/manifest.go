@@ -9,7 +9,7 @@
 // retour arrière) reste celle de QIARA Plus : ce paquet ne remplace jamais
 // /data/openqiarad.
 //
-// Désactivée par défaut (update.signed.enabled) et sans effet tant qu'aucune
+// Désactivée par défaut (signed_update.enabled) et sans effet tant qu'aucune
 // clé de production n'est gravée.
 package sigupdate
 

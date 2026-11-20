@@ -223,10 +223,10 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 		return u.note(ResNoKey, ErrNoKeys.Error(), false)
 	}
 	if !set.Enabled {
-		return u.note(ResDisabled, "option update.signed.enabled désactivée", false)
+		return u.note(ResDisabled, "option signed_update.enabled désactivée", false)
 	}
 	if !RepoRe.MatchString(set.Repo) {
-		return u.note(ResError, "dépôt non renseigné ou invalide (update.signed.repo, forme « propriétaire/dépôt »)", true)
+		return u.note(ResError, "dépôt non renseigné ou invalide (signed_update.repo, forme « propriétaire/dépôt »)", true)
 	}
 	channel := set.Channel
 	if channel == "" {
