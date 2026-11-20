@@ -113,9 +113,9 @@ func TestRealQPUpdateStageAndOrder(t *testing.T) {
 	// l'essai en cours bloque toute autre installation
 	g.rel.publish(6, armELF(1_200_000, 2), nil)
 	n := g.rel.count("/openqiarad-test")
-	g.u.mu.Lock()
+	g.u.chk.Lock()
 	g.u.st.PendingSeq = 0
-	g.u.mu.Unlock()
+	g.u.chk.Unlock()
 	if got := g.check(t); got != ResWaiting || g.rel.count("/openqiarad-test") != n {
 		t.Errorf("pendant l'essai : %q", got)
 	}

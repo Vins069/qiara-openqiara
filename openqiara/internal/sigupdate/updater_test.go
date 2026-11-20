@@ -91,9 +91,9 @@ func TestMinSeq(t *testing.T) {
 		t.Fatalf("résultat %q, dépôts %v", got, g.stage)
 	}
 	g.u.RunningSeq = 4
-	g.u.mu.Lock()
+	g.u.chk.Lock()
 	g.u.st.HighSeq = 0
-	g.u.mu.Unlock()
+	g.u.chk.Unlock()
 	if got := g.check(t); got != ResInstalling {
 		t.Fatalf("à partir de min_seq : %q", got)
 	}
@@ -141,23 +141,23 @@ func TestFailedVersionNotRetried(t *testing.T) {
 
 func TestReconcile(t *testing.T) {
 	g := newRig(t)
-	g.u.mu.Lock()
+	g.u.chk.Lock()
 	g.u.load()
 	g.u.st.PendingSeq = 6
-	g.u.mu.Unlock()
+	g.u.chk.Unlock()
 
 	g.trial.Store(true)
 	g.u.RunningSeq = 6
-	g.u.mu.Lock()
+	g.u.chk.Lock()
 	g.u.reconcile()
-	g.u.mu.Unlock()
+	g.u.chk.Unlock()
 	if s := g.u.Status(); s.Result != ResInstalling || s.PendingSeq != 6 {
 		t.Errorf("pendant l'essai : %+v", s)
 	}
 	g.trial.Store(false)
-	g.u.mu.Lock()
+	g.u.chk.Lock()
 	g.u.reconcile()
-	g.u.mu.Unlock()
+	g.u.chk.Unlock()
 	if s := g.u.Status(); s.Result != ResInstalled || s.PendingSeq != 0 || s.FailedSeq != 0 {
 		t.Errorf("après validation : %+v", s)
 	}
@@ -591,5 +591,39 @@ func TestSumOfBinaryMatchesSigned(t *testing.T) {
 	g.check(t)
 	if seen == "" {
 		t.Fatal("rien déposé")
+	}
+}
+
+// Status ne bloque pas pendant un téléchargement (l'API et le diagnostic MQTT l'appellent).
+func TestStatusNotBlockedDuringDownload(t *testing.T) {
+	g := newRig(t)
+	g.rel.publish(5, fakeBinary(mb1, 1), nil)
+	inDownload, release := make(chan struct{}), make(chan struct{})
+	g.rel.handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		g.rel.mu.Lock()
+		b := g.rel.files[r.URL.Path]
+		g.rel.mu.Unlock()
+		if r.URL.Path == "/openqiarad-test" {
+			close(inDownload)
+			<-release
+		}
+		w.Write(b)
+	})
+	done := make(chan string)
+	go func() { done <- g.check(t) }()
+	<-inDownload
+	got := make(chan Status)
+	go func() { got <- g.u.Status() }()
+	select {
+	case <-got:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Status bloqué pendant le téléchargement")
+	}
+	close(release)
+	if r := <-done; r != ResInstalling {
+		t.Errorf("résultat %q", r)
+	}
+	if s := g.u.Status(); s.PendingSeq != 5 || s.Result != ResInstalling {
+		t.Errorf("état publié : %+v", s)
 	}
 }

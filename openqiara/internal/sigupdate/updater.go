@@ -65,9 +65,13 @@ type Updater struct {
 	ManifestTimeout time.Duration
 	DownloadTimeout time.Duration
 
-	mu     sync.Mutex
-	st     State
+	chk    sync.Mutex // une vérification à la fois, tenue pendant tout le réseau
+	st     State      // état de travail, sous chk
 	loaded bool
+
+	smu       sync.Mutex // verrou court : l'instantané lu par Status, jamais tenu pendant le réseau
+	pub       State
+	pubLoaded bool
 }
 
 // Status : l'état exposé par l'API, le diagnostic QIARA Plus et MQTT.
@@ -105,15 +109,25 @@ func (u *Updater) load() {
 	}
 }
 
-// Status renvoie l'état courant.
+// publish met l'état de travail à la disposition de Status. Appelé sous chk.
+func (u *Updater) publish() {
+	u.smu.Lock()
+	u.pub, u.pubLoaded = u.st, true
+	u.smu.Unlock()
+}
+
+// Status renvoie l'état courant. N'attend jamais une vérification en cours (réseau).
 func (u *Updater) Status() Status {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	u.load()
-	s := Status{Keys: len(u.Keys), RunningSeq: u.RunningSeq, Result: u.st.Result, Message: u.st.Message,
-		SeenSeq: u.st.SeenSeq, SeenVersion: u.st.SeenVersion, PendingSeq: u.st.PendingSeq, FailedSeq: u.st.FailedSeq}
-	if !u.st.LastCheck.IsZero() {
-		s.LastCheck = u.st.LastCheck.UTC().Format(time.RFC3339)
+	u.smu.Lock()
+	if !u.pubLoaded {
+		u.pub, u.pubLoaded = loadState(u.StatePath), true
+	}
+	st := u.pub
+	u.smu.Unlock()
+	s := Status{Keys: len(u.Keys), RunningSeq: u.RunningSeq, Result: st.Result, Message: st.Message,
+		SeenSeq: st.SeenSeq, SeenVersion: st.SeenVersion, PendingSeq: st.PendingSeq, FailedSeq: st.FailedSeq}
+	if !st.LastCheck.IsZero() {
+		s.LastCheck = st.LastCheck.UTC().Format(time.RFC3339)
 	}
 	s.Active = len(u.Keys) > 0 && u.Settings != nil && u.Settings().Enabled
 	return s
@@ -122,10 +136,10 @@ func (u *Updater) Status() Status {
 // Run vérifie périodiquement. Bloque jusqu'à l'annulation de ctx. Au démarrage,
 // rapproche aussitôt l'état gardé de ce qui tourne (version installée, ou retour arrière).
 func (u *Updater) Run(ctx context.Context) {
-	u.mu.Lock()
+	u.chk.Lock()
 	u.load()
 	u.reconcile()
-	u.mu.Unlock()
+	u.chk.Unlock()
 	wait := u.First
 	if wait <= 0 {
 		wait = FirstDelay
@@ -158,7 +172,7 @@ func ClampInterval(d time.Duration) time.Duration {
 	return d
 }
 
-// note enregistre le résultat d'une vérification. Appelé verrou pris.
+// note enregistre le résultat d'une vérification. Appelé sous chk.
 func (u *Updater) note(code, msg string, checked bool) string {
 	if checked {
 		u.st.LastCheck = u.now()
@@ -167,6 +181,7 @@ func (u *Updater) note(code, msg string, checked bool) string {
 	if err := saveState(u.StatePath, u.st); err != nil {
 		u.logger().Warn("mise à jour signée : état non enregistré", "error", err)
 	}
+	u.publish()
 	lvl := slog.LevelInfo
 	if code == ResError || code == ResSignature || code == ResRolledBack {
 		lvl = slog.LevelWarn
@@ -175,7 +190,7 @@ func (u *Updater) note(code, msg string, checked bool) string {
 	return code
 }
 
-// reconcile rapproche l'installation en cours de ce qui tourne. Verrou pris.
+// reconcile rapproche l'installation en cours de ce qui tourne. Sous chk.
 func (u *Updater) reconcile() {
 	p := u.st.PendingSeq
 	if p == 0 {
@@ -199,8 +214,8 @@ func (u *Updater) reconcile() {
 
 // CheckOnce fait une vérification complète et renvoie son code de résultat.
 func (u *Updater) CheckOnce(ctx context.Context) string {
-	u.mu.Lock()
-	defer u.mu.Unlock()
+	u.chk.Lock()
+	defer u.chk.Unlock()
 	u.load()
 	u.reconcile()
 	set := u.Settings()
