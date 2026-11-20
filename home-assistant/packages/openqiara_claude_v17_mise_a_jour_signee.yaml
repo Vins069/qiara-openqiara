@@ -1,0 +1,90 @@
+# OpenQIARA Claude V17 : alertes de la mise à jour signée (Home Assistant). FICHIER GÉNÉRIQUE, NON DÉPLOYÉ.
+#
+# Utile seulement une fois la mise à jour signée activée sur la caméra (voir docs/mise-a-jour-signee.md) : l'entité
+# « Mise à jour signée » n'existe dans Home Assistant que lorsque le binaire porte une clé de publication.
+#
+# Installation (même principe que le paquet V16) :
+#   1. dans configuration.yaml, une seule fois :   homeassistant:
+#                                                     packages: !include_dir_named packages
+#   2. copier ce fichier dans /config/packages/ ;
+#   3. Outils de développement > YAML > Vérifier la configuration, puis recharger les automatisations.
+# Retour arrière : supprimer ce fichier de /config/packages/ puis recharger les automatisations (il ne change rien
+# d'autre : il ne fait que notifier).
+#
+# L'identifiant ci-dessous est celui que Home Assistant donne par défaut à l'appareil « OpenQiara Caméra » ; si l'appareil
+# a été renommé, remplacer le début « openqiara_camera_ ». Les alertes sont des notifications de Home Assistant (cloche) ;
+# pour les recevoir ailleurs (Telegram, téléphone), ajouter sous chaque « actions » un appel à votre service notify.
+# Les états sont ceux publiés par la caméra : « Installation en essai », « Installée », « Retour arrière »,
+# « Signature refusée », « Version refusée », « Erreur ».
+
+automation:
+  - id: openqiara_maj_signee_installation
+    alias: "Caméra Qiara : mise à jour signée en essai"
+    description: "Une version signée a été déposée chez QIARA Plus ; la caméra redémarre l'application et la met à l'essai (3 minutes)."
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        to: "Installation en essai"
+    actions:
+      - action: persistent_notification.create
+        data:
+          notification_id: openqiara_maj_signee
+          title: "Caméra Qiara : mise à jour en essai"
+          message: >-
+            Une version signée ({{ states('sensor.openqiara_camera_derniere_version_signee_vue') }}) est installée et à l'essai
+            ({{ now().strftime('%d/%m %H:%M') }}). QIARA Plus la valide par la santé de la caméra, ou revient à la précédente.
+
+  - id: openqiara_maj_signee_installee
+    alias: "Caméra Qiara : mise à jour signée installée"
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        to: "Installée"
+    actions:
+      - action: persistent_notification.create
+        data:
+          notification_id: openqiara_maj_signee
+          title: "Caméra Qiara : mise à jour installée"
+          message: >-
+            La version signée {{ states('sensor.openqiara_camera_version_signee_en_service') }}
+            ({{ states('sensor.openqiara_camera_derniere_version_signee_vue') }}) tourne ({{ now().strftime('%d/%m %H:%M') }}).
+
+  - id: openqiara_maj_signee_retour_arriere
+    alias: "Caméra Qiara : mise à jour signée annulée (retour arrière)"
+    description: "La nouvelle version n'a pas passé l'essai : QIARA Plus est revenu à la précédente. Elle ne sera pas réessayée."
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        to: "Retour arrière"
+    actions:
+      - action: persistent_notification.create
+        data:
+          notification_id: openqiara_maj_signee_echec
+          title: "Caméra Qiara : mise à jour annulée"
+          message: >-
+            La version signée n'a pas passé l'essai : la caméra est revenue à la version précédente
+            ({{ now().strftime('%d/%m %H:%M') }}). Elle ne sera pas réessayée ; une nouvelle version signée est nécessaire.
+
+  - id: openqiara_maj_signee_refus
+    alias: "Caméra Qiara : mise à jour signée refusée"
+    description: "Signature fausse, version refusée ou erreur : rien n'a été installé. À regarder si cela dure."
+    mode: single
+    triggers:
+      - trigger: state
+        entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        to:
+          - "Signature refusée"
+          - "Version refusée"
+          - "Erreur"
+        for: "00:10:00"
+    actions:
+      - action: persistent_notification.create
+        data:
+          notification_id: openqiara_maj_signee_refus
+          title: "Caméra Qiara : mise à jour signée refusée"
+          message: >-
+            État : {{ states('sensor.openqiara_camera_mise_a_jour_signee') }} ({{ now().strftime('%d/%m %H:%M') }}).
+            Rien n'a été installé. Détail : GET /api/v1/update/signed, champ « status.message ».
