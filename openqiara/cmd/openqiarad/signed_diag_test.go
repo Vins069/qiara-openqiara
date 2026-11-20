@@ -42,7 +42,7 @@ func TestSignedDiagLabelsCoverEveryResult(t *testing.T) {
 func TestRunningSignedSeq(t *testing.T) {
 	old := signedSeq
 	defer func() { signedSeq = old }()
-	for in, want := range map[string]int64{"0": 0, "17": 17, "": 0, "abc": 0, "-3": 0, "99999999999": 99999999999} {
+	for in, want := range map[string]int64{"OQSEQ=0;": 0, "": 0, "OQSEQ=17;": 17, "17": 0, "OQSEQ=abc;": 0, "OQSEQ=-3;": 0, "OQSEQ=17": 0, "OQSEQ=99999999999;": 99999999999} {
 		signedSeq = in
 		if got := runningSignedSeq(); got != want {
 			t.Errorf("%q -> %d, %d attendu", in, got, want)

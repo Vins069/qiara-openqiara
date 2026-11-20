@@ -18,5 +18,5 @@ cd "$(dirname "$0")/.."
 ZIGDIR=$(mktemp -d "${TMPDIR:-/tmp}/zigcc.XXXXXX"); trap 'rm -rf "$ZIGDIR"' EXIT INT TERM
 printf '#!/bin/sh\nexec python3 -m ziglang cc -target arm-linux-gnueabihf.2.30 "$@"\n' > "$ZIGDIR/zigcc"; chmod +x "$ZIGDIR/zigcc"
 GOTOOLCHAIN=${GOTOOLCHAIN:-auto} CGO_ENABLED=1 CC="$ZIGDIR/zigcc" GOOS=linux GOARCH=arm GOARM=7 \
-  go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=v0.1.0-rc.23-claude-$TAG -X main.commit=claude-$TAG -X main.date=$DATE -X main.signedSeq=$SEQ" -o "$OUT" ./cmd/openqiarad
+  go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=v0.1.0-rc.23-claude-$TAG -X main.commit=claude-$TAG -X main.date=$DATE -X 'main.signedSeq=OQSEQ=$SEQ;'" -o "$OUT" ./cmd/openqiarad
 echo "$(sha256sum "$OUT")  ($(stat -c %s "$OUT") bytes, Go $(go version | cut -d' ' -f3), zig $(python3 -m ziglang version))"

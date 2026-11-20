@@ -11,7 +11,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -47,16 +46,14 @@ var (
 	commit  = ""
 	date    = ""
 	// signedSeq : numéro (seq) de la version signée, celui du manifeste update.json qui l'annonce
-	// (-X main.signedSeq=17). « 0 » : binaire non signé, toute version signée lui est supérieure.
-	signedSeq = "0"
+	// (-X main.signedSeq=OQSEQ=17; oqsign le relit dans le binaire avant de signer).
+	// Vide : binaire non signé (seq 0), toute version signée lui est supérieure.
+	signedSeq string
 )
 
 // runningSignedSeq lit signedSeq ; une valeur illisible vaut 0 (jamais « plus récent que tout »).
 func runningSignedSeq() int64 {
-	n, err := strconv.ParseInt(signedSeq, 10, 64)
-	if err != nil || n < 0 {
-		return 0
-	}
+	n, _ := sigupdate.ParseSeqMarker(signedSeq)
 	return n
 }
 
