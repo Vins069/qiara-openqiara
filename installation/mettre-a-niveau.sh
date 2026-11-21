@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mettre-a-niveau.sh : passe une camera Qiara qui fait deja tourner OpenQiara a OpenQIARA Claude V16 et QIARA Plus v10,
+# mettre-a-niveau.sh : passe une camera Qiara qui fait deja tourner OpenQiara a OpenQIARA Claude V17 et QIARA Plus v10,
 # par SSH, sans demonter la carte. Les capteurs appaires, la configuration MQTT et les reglages restent.
 #   ./mettre-a-niveau.sh [--configuration configuration.txt] [--camera 192.168.1.50] [--oui] [--essai]
 # Prerequis : la cle SSH de CLE_SSH_PUBLIQUE autorisee sur la camera (sa cle privee a cote, meme nom sans .pub).
@@ -8,7 +8,7 @@
 #   2. sauvegarde sur l'ordinateur de /data/openqiara.json, boot.sh et post_boot.sh (./sauvegarde-camera-<date>/) ;
 #   3. depot du paquet dans /media/oqc, empreintes verifiees sur la camera ;
 #   4. boot.sh remplace par celui de la distribution (copie .avant-v16 gardee), bloc ajoute a post_boot.sh ;
-#   5. installer.sh lance sur la camera : V16, QIARA Plus, services du cloud, redemarrage, verification ;
+#   5. installer.sh lance sur la camera : V17, QIARA Plus, services du cloud, redemarrage, verification ;
 #   6. suivi jusqu'au rapport final.
 set -euo pipefail
 ICI="$(cd "$(dirname "$0")" && pwd)"
@@ -25,7 +25,7 @@ while [ $# -gt 0 ]; do
     *) err "option inconnue : $1";;
   esac
 done
-msg "=== OpenQIARA Claude V16 : mise a niveau par SSH ==="
+msg "=== OpenQIARA Claude V17 : mise a niveau par SSH ==="
 cfg_charger "$CONF"; cfg_verifier ssh
 [ -n "$CAM" ] || CAM=$(cfg CAMERA_ADRESSE "")
 [ -n "$CAM" ] || err "CAMERA_ADRESSE est vide (ou --camera <adresse>)"
@@ -90,14 +90,14 @@ ok "sauvegarde : $SAUV (openqiara.json contient le mot de passe MQTT : a garder 
 # ---------------------------------------------------------------- 3. paquet dans /media/oqc
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 fichier_defauts "$TMP/openqiara-defauts.json"; fichier_installation "$TMP/installation.conf"
-for f in openqiarad-claude-v16 openqiarad-claude-v16-compact; do printf '%s  %s\n' "$(sha256_de "$PAQUET/$f")" "$f" > "$TMP/$f.sha256"; done
+for f in openqiarad-claude-v17 openqiarad-claude-v17-compact; do printf '%s  %s\n' "$(sha256_de "$PAQUET/$f")" "$f" > "$TMP/$f.sha256"; done
 cam 'mkdir -p /media/oqc/sauvegarde'
-for f in openqiarad-claude-v16 openqiarad-claude-v16-compact qp-setup.sh installer.sh services-cloud.sh reglage.sh boot.sh; do envoyer "$PAQUET/$f" "/media/oqc/$f"; done
-for f in openqiarad-claude-v16.sha256 openqiarad-claude-v16-compact.sha256 openqiara-defauts.json installation.conf; do envoyer "$TMP/$f" "/media/oqc/$f"; done
-for f in openqiarad-claude-v16 openqiarad-claude-v16-compact qp-setup.sh installer.sh services-cloud.sh reglage.sh boot.sh; do
+for f in openqiarad-claude-v17 openqiarad-claude-v17-compact qp-setup.sh installer.sh services-cloud.sh reglage.sh boot.sh; do envoyer "$PAQUET/$f" "/media/oqc/$f"; done
+for f in openqiarad-claude-v17.sha256 openqiarad-claude-v17-compact.sha256 openqiara-defauts.json installation.conf; do envoyer "$TMP/$f" "/media/oqc/$f"; done
+for f in openqiarad-claude-v17 openqiarad-claude-v17-compact qp-setup.sh installer.sh services-cloud.sh reglage.sh boot.sh; do
   [ "$(cam "sha256sum /media/oqc/$f" | cut -d' ' -f1)" = "$(sha256_de "$PAQUET/$f")" ] || err "/media/oqc/$f abime pendant l'envoi : relancer"
 done
-cam 'chmod 755 /media/oqc/*.sh /media/oqc/openqiarad-claude-v16 /media/oqc/openqiarad-claude-v16-compact'
+cam 'chmod 755 /media/oqc/*.sh /media/oqc/openqiarad-claude-v17 /media/oqc/openqiarad-claude-v17-compact'
 ok "paquet depose dans /media/oqc, empreintes verifiees sur la camera"
 
 # ---------------------------------------------------------------- 4. boot.sh et post_boot.sh

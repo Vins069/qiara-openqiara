@@ -4,7 +4,7 @@ Il essaie les deux scripts Windows du paquet, `Preparer-carte-SD.ps1` et `Mettre
 
 ## Moitié Windows : `Simulateur-Windows.ps1`
 
-Le paquet `OpenQIARA-Claude-V16.zip` (ou V15) est décompressé comme le ferait l'utilisateur. Les deux vrais scripts tournent ensuite sous Windows PowerShell 5.1, chacun dans un processus neuf, sur 28 scénarios :
+Le paquet `OpenQIARA-Claude-V17.zip` (ou V15) est décompressé comme le ferait l'utilisateur. Les deux vrais scripts tournent ensuite sous Windows PowerShell 5.1, chacun dans un processus neuf, sur 28 scénarios :
 
 - le cas normal et le choix interactif du lecteur ;
 - un lecteur déjà partagé, déjà attaché, un partage ou un attachement refusé ;

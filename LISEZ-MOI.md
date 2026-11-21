@@ -1,4 +1,4 @@
-# OpenQIARA Claude V16 et QIARA Plus v10
+# OpenQIARA Claude V17 et QIARA Plus v10
 
 Distribution prête à l'emploi d'[OpenQiara](https://github.com/Caligone/openqiara) pour les caméras Qiara (modèle rond à cache, « HOMELABCAM ») reliées à Home Assistant. Elle s'installe en copiant un paquet sur la carte microSD de la caméra, ou par SSH sur une caméra qui fait déjà tourner OpenQiara. La caméra termine ensuite l'installation seule, puis rédige un rapport.
 
@@ -9,6 +9,16 @@ Par rapport à OpenQiara v0.1.0-rc.23, elle apporte :
 - **la santé de la caméra et la qualité de l'air** dans Home Assistant ;
 - **une meilleure résistance** aux coupures du Wi-Fi et de l'alimentation ;
 - **QIARA Plus**, une couche de fiabilité : lanceur à quatre emplacements (factory, prev, good, new), surveillant, mise à jour avec essai puis retour arrière automatique.
+
+**Nouveau dans la V17** (par rapport à la V16) :
+
+- **mise à jour automatique signée** : la caméra se met à jour d'elle-même depuis le dépôt `Vins069/qiara-openqiara`, uniquement avec une version signée (Ed25519) par son propriétaire. Active dès l'installation, une vérification toutes les 12 h. L'installation passe par QIARA Plus (essai, validation, retour arrière automatique), jamais alarme armée, et seulement si la vidéo coule ; la nouvelle version vérifie ensuite elle-même que la vidéo revient, sinon la précédente est remise. Pour la couper : `PUT /api/v1/update/signed` avec `{"enabled":false}` ;
+- **correction** : un détecteur de mouvement n'est plus retenu « en alarme » à la fin du délai de sortie (l'alarme pouvait se déclencher à cause du passage de la personne qui part) ;
+- **construction avec Go 1.26.11** : plus aucune faille connue de la bibliothèque standard (29 avec Go 1.26.1) ;
+- **paquet Home Assistant** `openqiara_claude_v17_mise_a_jour_signee.yaml` : 4 alertes (essai, installation, retour arrière, refus) ;
+- **outil `oqsign`** (poste du propriétaire) : création de la paire de clés, signature, vérification. Détails : `openqiara/docs/mise-a-jour-signee.md` du dépôt.
+
+Une caméra sous V16 passe à la V17 par `mettre-a-niveau.sh` (§ 2 b), à la main : le contrôle de la vidéo après la relance protège les mises à jour suivantes, pas cette première installation.
 
 **Nouveau dans la V16** (par rapport à la V15) :
 
@@ -76,7 +86,7 @@ Un codec ou un débit déjà choisi sur la caméra est gardé : la configuration
 ## 3. Home Assistant
 
 - **Entités** : elles apparaissent seules, par MQTT, sous l'appareil « OpenQiara Caméra », avec un appareil par capteur.
-- **Alertes** : copier `home-assistant/packages/openqiara_claude_v16.yaml` dans `/config/packages/` (et retirer `openqiara_claude_v15.yaml` s'il y est : les identifiants des automatisations ne portent plus de numéro de version). Il contient 8 automatisations : caméra hors ligne (et retour), aucune image servie parce que le codec diffère du réglage (et retour), détecteur de mouvement remis à zéro après un redémarrage de la caméra (sa « fin de mouvement » peut se perdre si la caméra redémarre pendant une détection), redémarrage par QIARA Plus, mise à jour en essai trop longue, carte presque pleine. Le mode d'emploi est en tête du fichier.
+- **Alertes** : copier `home-assistant/packages/openqiara_claude_v16.yaml` et `home-assistant/packages/openqiara_claude_v17_mise_a_jour_signee.yaml` dans `/config/packages/` (et retirer `openqiara_claude_v15.yaml` s'il y est : les identifiants des automatisations ne portent plus de numéro de version). Il contient 8 automatisations : caméra hors ligne (et retour), aucune image servie parce que le codec diffère du réglage (et retour), détecteur de mouvement remis à zéro après un redémarrage de la caméra (sa « fin de mouvement » peut se perdre si la caméra redémarre pendant une détection), redémarrage par QIARA Plus, mise à jour en essai trop longue, carte presque pleine. Le mode d'emploi est en tête du fichier.
 - **Tableau de bord** : la vue `home-assistant/tableau-de-bord-camera.yaml` regroupe l'état, les réglages d'image et la maintenance. Elle se colle dans l'éditeur YAML brut d'un tableau de bord.
 - **Image en direct** : `rtsp://<adresse de la caméra>:8554/openqiara`, à lire avec Frigate, go2rtc ou l'intégration « Caméra générique ».
   - Le flux RTSP n'a pas de mot de passe : toute machine du réseau local peut le lire. Le couper dans l'interface web si vous ne vous en servez pas.
@@ -105,14 +115,15 @@ Un codec ou un débit déjà choisi sur la caméra est gardé : la configuration
 | Partition | Modification |
 |---|---|
 | Système (p1) | `rcS.real` lance `/data/boot.sh` et garde le journal ext4 de /data (les mêmes correctifs que l'outil du projet OpenQiara). Si demandé, les fiches de démarrage de 9 services du cloud Qiara perdent leurs déclencheurs, avec une copie de sécurité. |
-| /data (p2) | Version compacte d'OpenQIARA Claude V16 (4 Mo, secours « factory »), boot.sh, configuration, Wi-Fi, clé SSH, post_boot.sh, QIARA Plus, fichiers du constructeur repris. |
-| /media (p3) | `/media/oqc` (installeur, rapport, outils, sauvegardes) et `/media/qp` (emplacements good, prev et new de QIARA Plus, dont la version complète d'OpenQIARA Claude V16 en service). |
+| /data (p2) | Version compacte d'OpenQIARA Claude V17 (4 Mo, secours « factory »), boot.sh, configuration, Wi-Fi, clé SSH, post_boot.sh, QIARA Plus, fichiers du constructeur repris. |
+| /media (p3) | `/media/oqc` (installeur, rapport, outils, sauvegardes) et `/media/qp` (emplacements good, prev et new de QIARA Plus, dont la version complète d'OpenQIARA Claude V17 en service). |
 
 ## Ce qui sort de votre réseau
 
 La caméra n'envoie ni image ni donnée hors de votre réseau : la vidéo et les capteurs ne vont qu'à votre courtier MQTT et à vos lecteurs vidéo. Restent des connexions sortantes sans contenu personnel :
 
 - la mise à l'heure (service NTP du constructeur) ;
+- la mise à jour signée (V17) : toutes les 12 h, la caméra lit le fichier `update.json` de la dernière release du dépôt GitHub réglé (`github.com`, avec les redirections vers `*.github.com`, en HTTPS), sans rien envoyer de votre installation ; le téléchargement d'une version (15 Mo) n'a lieu que si une version signée plus récente existe. Pour l'interdire : `PUT /api/v1/update/signed` avec `{"enabled":false}` ;
 - l'interface web, quand on ouvre sa page de mise à jour, interroge GitHub (api.github.com) pour connaître la dernière version publiée ;
 - le service VPN du constructeur (myriadvpn), gardé parce que son chien de garde matériel en dépend, peut encore tenter de joindre les serveurs Qiara arrêtés.
 
@@ -123,11 +134,11 @@ La caméra n'envoie ni image ni donnée hors de votre réseau : la vidéo et les
 - **Partition /data** : elle ne fait que 20 Mio. C'est pourquoi la version complète tourne depuis /media, et que /data ne garde que la version compacte comme secours. Avec `QIARA_PLUS=non`, c'est la version compacte qui tourne en permanence : elle est décompressée en mémoire à chaque démarrage et en consomme davantage (écart non mesuré sur une caméra réelle). QIARA Plus est donc recommandé.
 - **Clé d'hôte SSH** : sur certaines installations, la caméra régénère sa clé d'hôte à chaque démarrage. L'outil de mise à niveau l'accepte une fois, après le redémarrage de fin d'installation, et le signale. Au passage suivant, il indique quel fichier effacer.
 - **MQTT** : l'adresse du courtier se donne en IPv4 ou par son nom (pas d'adresse IPv6). Une liaison chiffrée (TLS) se règle ensuite dans l'interface web de la caméra.
-- **Éprouvé** : sur une caméra réelle (le code de la V16 y tourne, en H.265, avec QIARA Plus et le clavier), puis de bout en bout sur un banc d'essai neuf (préparation de la carte, installation, mise à niveau par SSH d'une caméra sous OpenQiara et d'une caméra sous V15, changement de réglage, sous Linux). Sous Windows, les deux scripts ont été éprouvés par un simulateur (`essais/simulateur-windows` du dépôt) : Windows PowerShell 5.1 réel, faux `wsl.exe` et `usbipd.exe`, 28 scénarios. La commande qu'ils transmettent à WSL a ensuite été rejouée sur un disque `/dev/sdd` simulé, puis la carte démarrée sur le banc. Restent à confirmer sur du vrai matériel : la reconnaissance du lecteur par usbipd-win et WSL, et macOS (vérifié par relecture seulement).
+- **Éprouvé** : sur une caméra réelle (le code de la V17 y tourne, en H.265, avec QIARA Plus et le clavier, après la V16), puis de bout en bout sur un banc d'essai neuf (préparation de la carte, installation, mise à niveau par SSH d'une caméra sous OpenQiara et d'une caméra sous V15, changement de réglage, sous Linux). Sous Windows, les deux scripts ont été éprouvés par un simulateur (`essais/simulateur-windows` du dépôt) : Windows PowerShell 5.1 réel, faux `wsl.exe` et `usbipd.exe`, 28 scénarios. La commande qu'ils transmettent à WSL a ensuite été rejouée sur un disque `/dev/sdd` simulé, puis la carte démarrée sur le banc. Restent à confirmer sur du vrai matériel : la reconnaissance du lecteur par usbipd-win et WSL, et macOS (vérifié par relecture seulement).
 
 ## Licence et origine
 
 - Licence MIT (voir `LICENSE`).
 - OpenQiara : © Caligone et contributeurs.
-- OpenQIARA Claude V16 et QIARA Plus v10 : © 2026 Vins069. Écrits avec Claude (Anthropic).
+- OpenQIARA Claude V17 et QIARA Plus v10 : © 2026 Vins069. Écrits avec Claude (Anthropic).
 - Ce projet n'est affilié ni à Qiara, ni à Cofidur, ni à Free.

@@ -154,7 +154,7 @@ bloc_post_boot() {
 }
 
 # paquet_verifier dossier : les fichiers de la camera sont presents et conformes a SHA256SUMS.
-PAQUET_FICHIERS="openqiarad-claude-v16 openqiarad-claude-v16-compact boot.sh qp-setup.sh installer.sh services-cloud.sh reglage.sh"
+PAQUET_FICHIERS="openqiarad-claude-v17 openqiarad-claude-v17-compact boot.sh qp-setup.sh installer.sh services-cloud.sh reglage.sh"
 paquet_verifier() {
   local d=$1 f w n
   [ -f "$d/SHA256SUMS" ] || err "paquet incomplet : $d/SHA256SUMS absent"

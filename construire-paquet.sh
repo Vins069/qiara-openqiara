@@ -1,18 +1,19 @@
 #!/bin/sh
-# construire-paquet.sh : fabrique le paquet pret a l'emploi « OpenQIARA-Claude-V16 » (dossier + archive zip).
-#   sh construire-paquet.sh [date AAAA-MM-JJ]       sortie : build/paquet/OpenQIARA-Claude-V16/ (dossier de travail), puis
-#                                                   paquet/OpenQIARA-Claude-V16.zip et son empreinte (versionnes)
+# construire-paquet.sh : fabrique le paquet pret a l'emploi « OpenQIARA-Claude-V17 » (dossier + archive zip).
+#   sh construire-paquet.sh [date AAAA-MM-JJ] [seq]  sortie : build/paquet/OpenQIARA-Claude-V17/ (dossier de travail), puis
+#                                                   paquet/OpenQIARA-Claude-V17.zip et son empreinte (versionnes)
 # Etapes : compilation reproductible du binaire ARM (Go 1.26.11, zig 0.17.0), version compacte (UPX 4), outils QIARA Plus
 # (qiara-plus/build.sh), assemblage, empreintes. Prerequis : go, python3 -m ziglang, upx, zip.
 set -e
 ICI=$(cd "$(dirname "$0")" && pwd)
 DATE=${1:-$(date +%Y-%m-%d)}
-OUT=$ICI/build/paquet/OpenQIARA-Claude-V16
+SEQ=${2:-17}   # numero de mise a jour signee du binaire (« seq » de update.json) ; 0 = construction non signee
+OUT=$ICI/build/paquet/OpenQIARA-Claude-V17
 rm -rf "$ICI/build/paquet"; mkdir -p "$OUT/camera" "$OUT/home-assistant" "$ICI/paquet"
 echo "== binaire ARM"
-sh "$ICI/openqiara/scripts/build-arm.sh" v16 "$DATE" "$OUT/camera/openqiarad-claude-v16"
-cp "$OUT/camera/openqiarad-claude-v16" "$OUT/camera/openqiarad-claude-v16-compact"
-upx -q --best --lzma "$OUT/camera/openqiarad-claude-v16-compact" >/dev/null
+sh "$ICI/openqiara/scripts/build-arm.sh" v17 "$DATE" "$OUT/camera/openqiarad-claude-v17" "$SEQ"
+cp "$OUT/camera/openqiarad-claude-v17" "$OUT/camera/openqiarad-claude-v17-compact"
+upx -q --best --lzma "$OUT/camera/openqiarad-claude-v17-compact" >/dev/null
 echo "== QIARA Plus v10"
 sh "$ICI/qiara-plus/build.sh" >/dev/null
 cp "$ICI/qiara-plus/dist/qp-setup.sh" "$OUT/camera/"
@@ -29,9 +30,9 @@ cp "$ICI/LISEZ-MOI.md" "$OUT/" 2>/dev/null || true
 cp "$ICI/LICENSE" "$OUT/" 2>/dev/null || true
 ( cd "$OUT/camera" && sha256sum * | grep -v ' SHA256SUMS$' > SHA256SUMS )
 ( cd "$OUT" && find . -type f ! -name SHA256SUMS-PAQUET | sort | xargs sha256sum > SHA256SUMS-PAQUET )
-( cd "$ICI/build/paquet" && rm -f OpenQIARA-Claude-V16.zip && zip -qr -X OpenQIARA-Claude-V16.zip OpenQIARA-Claude-V16 )
-cp "$ICI/build/paquet/OpenQIARA-Claude-V16.zip" "$ICI/paquet/OpenQIARA-Claude-V16.zip"
-( cd "$ICI/paquet" && sha256sum OpenQIARA-Claude-V16.zip > OpenQIARA-Claude-V16.zip.sha256 )
+( cd "$ICI/build/paquet" && rm -f OpenQIARA-Claude-V17.zip && zip -qr -X OpenQIARA-Claude-V17.zip OpenQIARA-Claude-V17 )
+cp "$ICI/build/paquet/OpenQIARA-Claude-V17.zip" "$ICI/paquet/OpenQIARA-Claude-V17.zip"
+( cd "$ICI/paquet" && sha256sum OpenQIARA-Claude-V17.zip > OpenQIARA-Claude-V17.zip.sha256 )
 echo "== paquet"
 ls -la "$OUT" "$OUT/camera"
-sha256sum "$ICI/paquet/OpenQIARA-Claude-V16.zip"
+sha256sum "$ICI/paquet/OpenQIARA-Claude-V17.zip"

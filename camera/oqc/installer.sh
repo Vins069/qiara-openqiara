@@ -1,12 +1,12 @@
 #!/bin/sh
-# installer.sh : termine sur la camera l'installation d'OpenQIARA Claude V16 et de QIARA Plus v10.
+# installer.sh : termine sur la camera l'installation d'OpenQIARA Claude V17 et de QIARA Plus v10.
 # Lance par le bloc « openqiara-claude » de /data/post_boot.sh, a la fin de chaque demarrage, tant que
 # /media/oqc/A-INSTALLER ou /media/oqc/A-VERIFIER existe. Le meme programme sert aux deux chemins :
-#   - carte SD preparee hors ligne (preparer-carte-sd.sh) : /data/openqiarad est deja OpenQIARA Claude V16 ;
+#   - carte SD preparee hors ligne (preparer-carte-sd.sh) : /data/openqiarad est deja OpenQIARA Claude V17 ;
 #   - mise a niveau par SSH d'une camera sous OpenQiara (mettre-a-niveau.sh) : le binaire en service est remplace.
 # Etapes (chacune journalisee dans /media/oqc/installation.log, l'avancement dans /media/oqc/etat) :
 #   1. attente d'un demarrage complet (OpenQiara en marche depuis au moins 60 s) ;
-#   2. OpenQIARA Claude V16 en service (empreinte verifiee), reglages par defaut fusionnes par OpenQiara au demarrage ;
+#   2. OpenQIARA Claude V17 en service (empreinte verifiee), reglages par defaut fusionnes par OpenQiara au demarrage ;
 #      /data ne fait que 20 Mio : la version compacte (UPX) y est posee, elle devient le secours « factory » ;
 #   3. QIARA Plus v10 (qp-setup.sh install --yes : controles, essai a blanc, retour arriere automatique si echec), puis
 #      la version complete mise en essai dans l'emplacement new (sur /media) et validee par le surveillant ;
@@ -20,8 +20,8 @@ LOG=$OQC/installation.log
 ETAT=$OQC/etat
 CONF=$OQC/installation.conf
 APP=$DATA/openqiarad
-V16=$OQC/openqiarad-claude-v16            # binaire complet : celui qui tourne, depuis /media (emplacement good de QIARA Plus)
-V16C=$OQC/openqiarad-claude-v16-compact   # meme version compressee (UPX, 4 Mio) : celle de /data (emplacement factory, secours)
+V17=$OQC/openqiarad-claude-v17            # binaire complet : celui qui tourne, depuis /media (emplacement good de QIARA Plus)
+V17C=$OQC/openqiarad-claude-v17-compact   # meme version compressee (UPX, 4 Mio) : celle de /data (emplacement factory, secours)
 LOCK=/tmp/oqc-installer.lock
 REBOOT_CMD=${OQC_REBOOT:-reboot}
 WAIT_MAX=${OQC_WAIT_MAX:-900}
@@ -60,15 +60,15 @@ qp_a_jour() { # les outils QIARA Plus installes sont ceux de ce paquet (empreint
 
 # ---------------------------------------------------------------- reprise apres une coupure de courant
 # Si le courant a coupe pendant le remplacement du binaire (etape 2), /data/openqiarad peut manquer : la camera ne serait
-# plus une passerelle radio. Il est remis avant toute attente : V16 compacte (empreinte verifiee), sinon la copie de
+# plus une passerelle radio. Il est remis avant toute attente : V17 compacte (empreinte verifiee), sinon la copie de
 # securite du binaire d'origine.
 recover_app() {
   rm -f "$APP.oqc.tmp"
   [ -s "$APP" ] && return 0
-  if [ -s "$V16C" ] && [ -s "$V16C.sha256" ]; then
-    read -r w _x < "$V16C.sha256"
-    if [ "$(sha_of "$V16C")" = "$w" ] && cp "$V16C" "$APP.oqc.tmp" && chmod 755 "$APP.oqc.tmp" && [ "$(sha_of "$APP.oqc.tmp")" = "$w" ] && sync && mv -f "$APP.oqc.tmp" "$APP" && sync; then
-      log "REPRISE : $APP absent (coupure pendant le remplacement ?) : OpenQIARA Claude V16 compact remis"; return 0
+  if [ -s "$V17C" ] && [ -s "$V17C.sha256" ]; then
+    read -r w _x < "$V17C.sha256"
+    if [ "$(sha_of "$V17C")" = "$w" ] && cp "$V17C" "$APP.oqc.tmp" && chmod 755 "$APP.oqc.tmp" && [ "$(sha_of "$APP.oqc.tmp")" = "$w" ] && sync && mv -f "$APP.oqc.tmp" "$APP" && sync; then
+      log "REPRISE : $APP absent (coupure pendant le remplacement ?) : OpenQIARA Claude V17 compact remis"; return 0
     fi
   fi
   if [ -s "$OQC/sauvegarde/openqiarad-avant-v16" ] && cp -p "$OQC/sauvegarde/openqiarad-avant-v16" "$APP.oqc.tmp" && sync && mv -f "$APP.oqc.tmp" "$APP" && sync; then
@@ -78,7 +78,7 @@ recover_app() {
 }
 
 # ---------------------------------------------------------------- 2. binaire
-swap_binary() { # remplace le binaire en service (camera sans QIARA Plus) par V16, avec copie de securite sur /media
+swap_binary() { # remplace le binaire en service (camera sans QIARA Plus) par V17, avec copie de securite sur /media
   p=$(app_pid)
   cp -p "$APP" "$OQC/sauvegarde/openqiarad-avant-v16" 2>/dev/null && sync || { log "ECHEC : copie de securite du binaire en service impossible : rien change"; return 1; }
   log "copie de securite : $OQC/sauvegarde/openqiarad-avant-v16 ($(sha_of "$OQC/sauvegarde/openqiarad-avant-v16" | cut -c1-12))"
@@ -88,28 +88,28 @@ swap_binary() { # remplace le binaire en service (camera sans QIARA Plus) par V1
   i=0; while [ -n "$p" ] && [ -d "/proc/$p" ] && [ "$i" -lt 15 ]; do sleep 1; i=$((i + 1)); done
   [ -n "$p" ] && [ -d "/proc/$p" ] && kill -9 "$p" 2>/dev/null
   rm -f "$APP"; sync
-  if cp "$V16C" "$APP.oqc.tmp" && chmod 755 "$APP.oqc.tmp" && [ "$(sha_of "$APP.oqc.tmp")" = "$WANTC" ] && sync && mv -f "$APP.oqc.tmp" "$APP" && sync; then
-    log "OpenQIARA Claude V16 (version compacte) mis en place sous $APP ; boot.sh le relance"
+  if cp "$V17C" "$APP.oqc.tmp" && chmod 755 "$APP.oqc.tmp" && [ "$(sha_of "$APP.oqc.tmp")" = "$WANTC" ] && sync && mv -f "$APP.oqc.tmp" "$APP" && sync; then
+    log "OpenQIARA Claude V17 (version compacte) mis en place sous $APP ; boot.sh le relance"
     return 0
   fi
   rm -f "$APP.oqc.tmp"
-  log "ECHEC : copie de V16 impossible (place sur $DATA : $(free_kb "$DATA") Kio) : binaire d'origine remis"
+  log "ECHEC : copie de V17 impossible (place sur $DATA : $(free_kb "$DATA") Kio) : binaire d'origine remis"
   cp -p "$OQC/sauvegarde/openqiarad-avant-v16" "$APP" && sync
   return 1
 }
 
 do_install() {
   mkdir -p "$OQC/sauvegarde"
-  log "== installation d'OpenQIARA Claude V16 et de QIARA Plus v10 : debut (uptime $(uptime_s) s)"
+  log "== installation d'OpenQIARA Claude V17 et de QIARA Plus v10 : debut (uptime $(uptime_s) s)"
   etat "attente-demarrage"
   wait_app 60 "$WAIT_MAX" || { etat "echec : OpenQiara ne tourne pas depuis 60 s apres $WAIT_MAX s d'attente"; return 1; }
-  for b in "$V16" "$V16C"; do
+  for b in "$V17" "$V17C"; do
     [ -s "$b" ] && [ -s "$b.sha256" ] || { etat "echec : $b ou son empreinte absent"; return 1; }
     read -r w _x < "$b.sha256"; [ "$(sha_of "$b")" = "$w" ] || { etat "echec : empreinte de $b non conforme (copie abimee ?)"; return 1; }
   done
-  read -r WANT _x < "$V16.sha256"; read -r WANTC _x < "$V16C.sha256"
+  read -r WANT _x < "$V17.sha256"; read -r WANTC _x < "$V17C.sha256"
 
-  # 2. OpenQIARA Claude V16 en service
+  # 2. OpenQIARA Claude V17 en service
   etat "binaire"
   if [ -s "$OQC/openqiara-defauts.json" ] && [ ! -e "$DATA/openqiara-defauts.json.applique" ]; then
     cp "$OQC/openqiara-defauts.json" "$DATA/openqiara-defauts.json" && log "reglages par defaut deposes (fusionnes par OpenQiara a son demarrage, sans ecraser un reglage existant)"
@@ -119,18 +119,18 @@ do_install() {
   else
     cur=$(sha_of "$APP")
     if [ "$cur" = "$WANTC" ] || [ "$cur" = "$WANT" ]; then
-      log "V16 deja en service ($APP)"
+      log "V17 deja en service ($APP)"
       if [ -e "$DATA/openqiara-defauts.json" ]; then
         # deposes apres son demarrage : relance pour qu'il les fusionne
         p=$(app_pid); [ -n "$p" ] && kill "$p" 2>/dev/null && log "OpenQiara relance pour fusionner les reglages par defaut"
       fi
     else
-      log "binaire en service : $(echo "$cur" | cut -c1-12) ($(wc -c < "$APP") octets) ; V16 compact : $(echo "$WANTC" | cut -c1-12)"
+      log "binaire en service : $(echo "$cur" | cut -c1-12) ($(wc -c < "$APP") octets) ; V17 compact : $(echo "$WANTC" | cut -c1-12)"
       swap_binary || { etat "echec : binaire non remplace (la camera reste sur sa version d'origine)"; return 1; }
     fi
   fi
   sleep 15
-  wait_app 30 300 || { etat "echec : OpenQIARA Claude V16 ne reste pas en marche"; return 1; }
+  wait_app 30 300 || { etat "echec : OpenQIARA Claude V17 ne reste pas en marche"; return 1; }
   v="(lanceur QIARA Plus)"; is_launcher || v=$("$APP" -version 2>/dev/null | head -n 1)
   log "OpenQiara en marche (pid $(app_pid)) ; version : ${v:-?}"
   grep -E "installation defaults (applied|not applied)" "$DATA/openqiarad.log" 2>/dev/null | tail -n 1 | cut -c1-240 >> "$LOG"
@@ -146,7 +146,7 @@ do_install() {
     is_launcher && [ -f "$DATA/qp/qp-guard" ] && log "QIARA Plus d'une version plus ancienne : outils mis a jour (emplacements et reglages conserves)"
     log "installation de QIARA Plus v10 (qp-setup.sh install --yes, jusqu'a 4 min)"
     if sh "$OQC/qp-setup.sh" install --yes >> "$LOG" 2>&1; then log "QIARA Plus v10 installe"
-    else etat "echec : QIARA Plus non installe (retour arriere automatique fait par qp-setup ; OpenQIARA Claude V16 reste en service)"; return 1; fi
+    else etat "echec : QIARA Plus non installe (retour arriere automatique fait par qp-setup ; OpenQIARA Claude V17 reste en service)"; return 1; fi
   fi
   # 3b. version complete dans l'emplacement new (sur /media), validee par le surveillant apres 3 min de bonne sante et de liaison MQTT
   if is_launcher && [ -f "$DATA/qp/qp-update" ]; then
@@ -155,7 +155,7 @@ do_install() {
     case "$rs" in factory) rb=$DATA/qp/slots/factory/openqiarad;; good|prev|new) rb=/media/qp/slots/$rs/openqiarad;; *) rb=;; esac
     if [ -n "$rb" ] && [ "$(sha_of "$rb")" = "$WANT" ]; then log "version complete deja en service (emplacement $rs)"
     else
-      mkdir -p /media/qp && cp "$V16" /media/qp/incoming.oqc && sh "$DATA/qp/qp-update" stage /media/qp/incoming.oqc "$WANT" >> "$LOG" 2>&1 \
+      mkdir -p /media/qp && cp "$V17" /media/qp/incoming.oqc && sh "$DATA/qp/qp-update" stage /media/qp/incoming.oqc "$WANT" >> "$LOG" 2>&1 \
         || { rm -f /media/qp/incoming.oqc; etat "echec : mise en essai de la version complete impossible (la version compacte reste en service)"; return 1; }
       rm -f /media/qp/incoming.oqc
       : > "$DATA/qp/state/expected_stop"; p=$(app_pid); [ -n "$p" ] && kill "$p" 2>/dev/null
@@ -188,7 +188,7 @@ do_verify() {
   sleep 30
   R=$OQC/rapport.txt; ok=1
   {
-    echo "Rapport d'installation OpenQIARA Claude V16 / QIARA Plus v10 - $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Rapport d'installation OpenQIARA Claude V17 / QIARA Plus v10 - $(date '+%Y-%m-%d %H:%M:%S')"
     echo
     p=$(app_pid); [ -n "$p" ] && echo "OK   OpenQiara en marche (pid $p, depuis $(pid_age "$p") s)" || { echo "KO   OpenQiara absent"; ok=0; }
     port80 && echo "OK   interface web : port 80 ouvert" || { echo "KO   port 80 ferme"; ok=0; }

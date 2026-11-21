@@ -1,8 +1,8 @@
-# OpenQIARA Claude V16 et QIARA Plus v10
+# OpenQIARA Claude V17 et QIARA Plus v10
 
 Distribution prête à l'emploi d'[OpenQiara](https://github.com/Caligone/openqiara) pour les caméras **Qiara**, le modèle rond à cache (« HOMELABCAM »). Elle remet la caméra et ses capteurs 868 MHz en service **en local, dans Home Assistant**, sans le cloud Qiara, arrêté depuis octobre 2025.
 
-**Télécharger** : [paquet/OpenQIARA-Claude-V16.zip](paquet/OpenQIARA-Claude-V16.zip). Son empreinte SHA-256 est dans [paquet/OpenQIARA-Claude-V16.zip.sha256](paquet/OpenQIARA-Claude-V16.zip.sha256).
+**Télécharger** : [paquet/OpenQIARA-Claude-V17.zip](paquet/OpenQIARA-Claude-V17.zip). Son empreinte SHA-256 est dans [paquet/OpenQIARA-Claude-V17.zip.sha256](paquet/OpenQIARA-Claude-V17.zip.sha256). La [dernière release](../../releases/latest) porte la version signée pour la mise à jour automatique (`update.json`, `update.json.sig`, `openqiarad-claude-v17`) et l'outil `oqsign`.
 
 ## Qu'est-ce que c'est ?
 
@@ -10,24 +10,57 @@ Le kit Qiara comprend une caméra, des détecteurs d'ouverture et de mouvement, 
 
 [OpenQiara](https://github.com/Caligone/openqiara), écrit par Caligone, remplace la partie cloud par un petit programme qui tourne directement sur la caméra. Il pilote la radio des capteurs, fait tourner l'alarme et publie tout dans Home Assistant par MQTT.
 
-**OpenQIARA Claude V16** reprend OpenQiara v0.1.0-rc.23 et y ajoute la vidéo H.265, les réglages d'image, la santé de la caméra et une installation sans édition à la main. **QIARA Plus v10** est une couche de fiabilité installée à côté : elle relance ce qui se bloque et permet de revenir en arrière après une mise à jour ratée.
+**OpenQIARA Claude V17** reprend OpenQiara v0.1.0-rc.23 et y ajoute la vidéo H.265, les réglages d'image, la santé de la caméra, une installation sans édition à la main et, depuis la V17, la mise à jour automatique signée. **QIARA Plus v10** est une couche de fiabilité installée à côté : elle relance ce qui se bloque et permet de revenir en arrière après une mise à jour ratée.
 
 ```
  Capteurs 868 MHz ──radio──► Caméra Qiara ──MQTT──► Home Assistant (+ Alarmo)
- (ouverture, mouvement,      OpenQIARA Claude V16
+ (ouverture, mouvement,      OpenQIARA Claude V17
   sirène, clavier)           QIARA Plus v10       ──RTSP──► Frigate, go2rtc, lecteur vidéo
 ```
 
-Rien ne sort de votre réseau : ni image, ni donnée de capteur.
+Rien ne sort de votre réseau : ni image, ni donnée de capteur. La seule connexion voulue vers Internet est la lecture, toutes les 12 heures, de la dernière version signée publiée sur GitHub (mise à jour automatique, coupable à tout moment).
+
+## Nouveau dans la V17
+
+### Mise à jour automatique signée
+
+La caméra se met à jour d'elle-même depuis le dépôt `Vins069/qiara-openqiara`, **uniquement avec une version signée par son propriétaire**. L'installation passe par QIARA Plus : la nouvelle version est mise à l'essai, validée par la santé de la caméra, ou la précédente revient toute seule.
+
+- **Active dès l'installation de la V17**, avec une vérification toutes les 12 heures. Elle se coupe à tout moment (`PUT /api/v1/update/signed` avec `{"enabled":false}`).
+- **Jamais alarme armée** : aucune installation ni redémarrage tant que l'alarme n'est pas désarmée et son état connu.
+- **Contrôle du flux vidéo.** La caméra ne relance pas son application si la vidéo ne coule pas déjà. Après la relance, la nouvelle version vérifie elle-même que la vidéo revient ; sinon la version précédente est remise automatiquement. Cache de l'objectif fermé, le flux est en pause par conception : rien n'est contrôlé.
+- **Signature Ed25519** : une release non signée ou signée par une autre clé est ignorée. Une version ne peut ni être rejouée ni ramener la caméra en arrière. La clé privée reste chez son propriétaire ; la caméra ne connaît que la clé publique.
+- **État dans Home Assistant** : entités « Mise à jour signée », « Version signée en service », « Dernière version signée vue », « Dernière vérification ». Le paquet `openqiara_claude_v17_mise_a_jour_signee.yaml` envoie une notification à l'essai, à l'installation, au retour arrière et en cas de refus.
+- **Outil `oqsign`** (poste du propriétaire) : création de la paire de clés, signature d'une version, vérification.
+
+Détails, procédure de clé et publication d'une version : [openqiara/docs/mise-a-jour-signee.md](openqiara/docs/mise-a-jour-signee.md).
+
+### Corrections de bugs
+
+- **Détecteur de mouvement à la sortie** : un détecteur de mouvement n'est plus retenu « en alarme » à la fin du délai de sortie. Sa fin de mouvement ne ferme qu'une fenêtre du micrologiciel (environ 20 s), que le passage de la personne qui part ouvre toujours pendant le délai de sortie : l'alarme pouvait donc se déclencher à la fin du délai. Seules les ouvertures encore ouvertes déclenchent (reprise de la correction de la rc.25 d'OpenQiara).
+- **Compilateur** : la V16 était construite avec Go 1.26.1, dont la bibliothèque standard a 29 failles connues (dont `crypto/x509`, `crypto/tls`, `net/http`). La V17 est construite avec Go 1.26.11 : le contrôle `govulncheck` ne trouve plus aucune faille de la bibliothèque standard.
+
+### Améliorations
+
+- **Mise à jour automatique livrée** : la V16 l'annonçait sans la fournir ; elle est livrée et activée (voir ci-dessus).
+- **Revue indépendante du code avant livraison** : un dépôt en échec qui a posé l'essai l'annule ; un manifeste bien signé mais invalide est classé « Version refusée » et non « Signature refusée » ; rien n'est écrit sur la carte tant que la fonction est coupée ; l'ordre de relance est suivi jusqu'au bout ; une version quittée à la main n'est pas réinstallée.
+- **Construction reproductible vérifiée** : Go 1.26.11 et zig 0.17.0 sont contrôlés par `build-arm.sh`, qui refuse toute autre version, car la somme du binaire en dépend.
+- **Essais** : ajout de tests pour la mise à jour signée, le contrôle du flux, l'outil `oqsign` et la clé de publication (voir « État des essais »).
+
+### Mettre la V16 à niveau
+
+Une caméra sous V16 passe à la V17 par la mise à niveau SSH (étape 5b). C'est la **dernière fois** qu'elle se fait à la main : les versions suivantes, signées, arrivent d'elles-mêmes. Le contrôle du flux vidéo après la relance protège les mises à jour **vers** la V17 et les suivantes, pas cette première installation.
+
+> **Autre dépôt, autre clé.** La clé publique gravée dans le binaire est celle de l'auteur : une caméra ne suit que les versions signées par lui. Pour publier vos propres versions, gravez votre clé (`openqiara/internal/sigupdate/keys.go`), reconstruisez et réglez `signed_update.repo`.
 
 ## Nouveau dans la V16
 
 - **Base OpenQiara v0.1.0-rc.23** (31/10/2026) : plusieurs codes pour le clavier, état « inconnu » d'un capteur qui n'a pas encore parlé depuis le démarrage, correctifs du projet. Le dépôt d'origine reçoit en retour les améliorations de cette distribution, une par une ([PR #72](https://github.com/Caligone/openqiara/pull/72) : écriture atomique de l'état de l'alarme).
-- **Mises à jour de la distribution** par `mettre-a-niveau.sh`, avec l'essai et le retour arrière automatique de QIARA Plus. Une mise à jour automatique depuis ce dépôt, signée, est prévue pour la V17.
+- **Mises à jour de la distribution** par `mettre-a-niveau.sh`, avec l'essai et le retour arrière automatique de QIARA Plus. Une mise à jour automatique depuis ce dépôt, signée, est livrée dans la V17 (voir ci-dessus).
 - **Codec fixé par la configuration** : plus de bascule de codec en cours de flux ni de sonde au démarrage (règle du projet OpenQiara, voir le ticket #64). Si hlcamd produit un autre codec que le réglage, rien n'est servi, l'entité « Codec vidéo différent du réglage » passe à ON et le paquet Home Assistant prévient.
 - **Correction d'un arrêt possible d'OpenQiara** à la reconnexion MQTT, quand un capteur envoyait sa température au même instant (défaut présent depuis plusieurs versions).
 - **Paquet Home Assistant** : 8 automatisations, dont deux nouvelles : aucune image servie (codec), et détecteur de mouvement remis à zéro après un redémarrage de la caméra.
-- Une caméra sous V15 passe à la V16 par la mise à niveau SSH (étape 5b) : capteurs, réglages et QIARA Plus sont conservés.
+- Une caméra sous V15 passait à la V16 par la mise à niveau SSH : capteurs, réglages et QIARA Plus sont conservés (de même pour la V17).
 
 ## Ce que la distribution apporte
 
@@ -66,12 +99,12 @@ Comptez 30 minutes, dont 10 à 15 où la caméra travaille seule.
 
 ### Étape 1 : télécharger et vérifier le paquet
 
-1. Téléchargez [OpenQIARA-Claude-V16.zip](paquet/OpenQIARA-Claude-V16.zip) et [son fichier .sha256](paquet/OpenQIARA-Claude-V16.zip.sha256) dans le même dossier.
+1. Téléchargez [OpenQIARA-Claude-V17.zip](paquet/OpenQIARA-Claude-V17.zip) et [son fichier .sha256](paquet/OpenQIARA-Claude-V17.zip.sha256) dans le même dossier.
 2. Vérifiez que le fichier n'a pas été abîmé. La commande doit répondre « OK », ou afficher la même empreinte que le fichier `.sha256` :
-   - Linux : `sha256sum -c OpenQIARA-Claude-V16.zip.sha256`
-   - macOS : `shasum -a 256 -c OpenQIARA-Claude-V16.zip.sha256`
-   - Windows (PowerShell) : `Get-FileHash .\OpenQIARA-Claude-V16.zip -Algorithm SHA256`
-3. Décompressez le zip. Vous obtenez un dossier `OpenQIARA-Claude-V16` : toutes les commandes suivantes se lancent depuis ce dossier.
+   - Linux : `sha256sum -c OpenQIARA-Claude-V17.zip.sha256`
+   - macOS : `shasum -a 256 -c OpenQIARA-Claude-V17.zip.sha256`
+   - Windows (PowerShell) : `Get-FileHash .\OpenQIARA-Claude-V17.zip -Algorithm SHA256`
+3. Décompressez le zip. Vous obtenez un dossier `OpenQIARA-Claude-V17` : toutes les commandes suivantes se lancent depuis ce dossier.
 
 ### Étape 2 : préparer Home Assistant
 
@@ -182,10 +215,10 @@ Le rapport indique si l'installation a réussi, si la liaison MQTT est établie 
         packages: !include_dir_named packages
       ```
 
-   2. copiez `home-assistant/packages/openqiara_claude_v16.yaml` dans `/config/packages/` (et retirez `openqiara_claude_v15.yaml` si vous l'aviez : les identifiants des automatisations ne portent plus de numéro de version) ;
+   2. copiez `home-assistant/packages/openqiara_claude_v16.yaml` et `home-assistant/packages/openqiara_claude_v17_mise_a_jour_signee.yaml` dans `/config/packages/` (et retirez `openqiara_claude_v15.yaml` si vous l'aviez : les identifiants des automatisations ne portent plus de numéro de version) ;
    3. vérifiez la configuration (Outils de développement, YAML) et redémarrez.
 
-   Le paquet ajoute 8 automatisations : caméra hors ligne et retour, aucune image servie parce que le codec diffère du réglage et retour, détecteur de mouvement remis à zéro après un redémarrage de la caméra, redémarrage par QIARA Plus, mise à jour en essai trop longue, carte presque pleine.
+   Le premier paquet ajoute 8 automatisations : caméra hors ligne et retour, aucune image servie parce que le codec diffère du réglage et retour, détecteur de mouvement remis à zéro après un redémarrage de la caméra, redémarrage par QIARA Plus, mise à jour en essai trop longue, carte presque pleine. Le second en ajoute 4 pour la mise à jour signée : essai, installation, retour arrière, refus.
 4. **Tableau de bord** : `home-assistant/tableau-de-bord-camera.yaml` est une vue prête, avec l'état, les réglages d'image et la maintenance. Collez-la dans l'éditeur YAML brut d'un tableau de bord.
 5. **Image en direct** : `rtsp://<adresse de la caméra>:8554/openqiara`, à lire avec Frigate, go2rtc ou l'intégration « Caméra générique ».
    - En H.265, le navigateur lit par WebRTC : Frigate 0.16.3 et plus, Home Assistant 2026.5.3 et plus, Chrome 136 et plus, ou les applications Home Assistant.
@@ -230,24 +263,25 @@ Pour restaurer la carte complète, avec la sauvegarde `sauvegarde-carte-<date>/`
 | `paquet/` | Le paquet prêt à l'emploi : binaires ARM compilés de façon reproductible, outils et mode d'emploi |
 | `installation/` | Outils de l'ordinateur : préparation de la carte SD, mise à niveau par SSH, scripts Windows, configuration |
 | `camera/oqc/` | Installeur exécuté par la caméra, réglages vidéo, neutralisation des services du cloud |
-| `openqiara/` | Sources d'OpenQiara (Go), avec les modifications de cette distribution |
+| `openqiara/` | Sources d'OpenQiara (Go), avec les modifications de cette distribution, dont `cmd/oqsign` (signature) et `internal/sigupdate` (mise à jour signée) |
 | `qiara-plus/` | Sources, outils construits (`dist/`) et suites d'essais de QIARA Plus |
-| `home-assistant/` | Paquet d'alertes et vue de tableau de bord |
+| `home-assistant/` | Paquets d'alertes (caméra, mise à jour signée) et vue de tableau de bord |
 | `essais/simulateur-windows/` | Simulateur des scripts Windows : faux `wsl.exe` et `usbipd.exe`, 28 scénarios, rejeu sous Linux |
 | `outils/` | Mesure d'un flux RTSP (H.264 et H.265) |
 
-Le mode d'emploi complet, également présent dans le zip, est [LISEZ-MOI.md](LISEZ-MOI.md). Pour reconstruire le paquet : `sh construire-paquet.sh`. Il faut Go 1.26, zig, UPX et zip, et les binaires obtenus sont identiques à ceux du paquet.
+Le mode d'emploi complet, également présent dans le zip, est [LISEZ-MOI.md](LISEZ-MOI.md). Pour reconstruire le paquet : `sh construire-paquet.sh`. Il faut Go 1.26.11, zig 0.17.0, UPX et zip (`build-arm.sh` refuse d'autres versions de Go et de zig), et les binaires obtenus sont identiques à ceux du paquet.
 
 ## État des essais
 
-- **Caméra réelle** : le code de la V16 tourne sur la caméra de l'auteur (H.265 à 2,5 Mbit/s, QIARA Plus, clavier avec Alarmo), après deux relectures indépendantes du code et une batterie d'essais (tests Go sur la vraie racine ARM, flux H.265 réel servi, flux H.264 inattendu écarté, retour arrière vers la version précédente, coupures de courant).
+- **Caméra réelle, V17** : installée le 21/11/2026 sur la caméra de l'auteur par la mise à niveau manuelle, alarme désarmée, essai puis validation par QIARA Plus (4 minutes). Contrôlés après : journal sans erreur, mémoire normale, vidéo H.265 à 2,5 Mbit/s réglée, capteurs, sirène et clavier joignables, 93 entités disponibles dans Home Assistant. L'image n'a pas été contrôlée à cette occasion (cache fermé). La première vérification de mise à jour signée répond « dépôt injoignable » tant qu'aucune release signée n'est publiée : comportement attendu.
+- **Caméra réelle, V16** : le code de la V16 tourne sur la caméra de l'auteur (H.265 à 2,5 Mbit/s, QIARA Plus, clavier avec Alarmo), après deux relectures indépendantes du code et une batterie d'essais (tests Go sur la vraie racine ARM, flux H.265 réel servi, flux H.264 inattendu écarté, retour arrière vers la version précédente, coupures de courant).
 - **Banc d'essai neuf**, avec une carte d'origine simulée et qemu-arm :
   - préparation de la carte, installation et rapport ;
   - mise à niveau par SSH d'une caméra sous OpenQiara rc22, d'une caméra sous V15, et relance ;
   - changement de réglage ;
   - reprises après coupure.
-- **Code** : tests Go (26 paquets, avec détection des accès concurrents) et 13 suites QIARA Plus (300 contrôles), sans échec.
-- **Windows** : les deux scripts sont éprouvés par le simulateur sous Windows PowerShell 5.1 réel (28 scénarios sur 28).
+- **Code** : tests Go (28 paquets, avec détection des accès concurrents, Go 1.26.11) : 542 réussis, 7 ignorés, 0 échec ; les mêmes paquets touchés, rejoués sous qemu ARMv7 : 371 réussis, 0 échec ; 13 suites QIARA Plus (341 contrôles) sur le vrai shell de la caméra émulé, sans échec ; construction du binaire deux fois avec la même somme SHA-256.
+- **Windows** : les deux scripts sont éprouvés par le simulateur sous Windows PowerShell 5.1 réel (28 scénarios sur 28) sur la V16. Pour la V17, seuls les noms de fichiers du paquet ont changé : le simulateur n'a pas été rejoué.
 - **Reste à confirmer sur du vrai matériel** : la reconnaissance du lecteur de carte par usbipd-win et WSL, macOS, et une première installation complète par un autre utilisateur.
 
 Retours bienvenus par les [issues](../../issues) du dépôt.
@@ -255,6 +289,7 @@ Retours bienvenus par les [issues](../../issues) du dépôt.
 ## Limites connues
 
 - **HomeKit** : H.264 seulement.
+- **Mise à jour signée** : elle ne vérifie la vidéo qu'à cache ouvert, ne relance jamais alarme armée et ne protège pas la première installation de la V17. Le Wi-Fi de la caméra peut décrocher plusieurs minutes pendant le téléchargement de 15 Mo (constaté une fois) : QIARA Plus le rétablit.
 - **Une seule caméra par Home Assistant** : OpenQiara donne des identifiants fixes à ses entités.
 - **Flux RTSP** : il n'a pas de mot de passe ; toute machine du réseau local peut le lire. Coupez-le dans l'interface web si vous ne vous en servez pas.
 - **Adresse du courtier MQTT** : IPv4 ou nom, pas d'IPv6. Le TLS se règle ensuite dans l'interface web de la caméra.
@@ -263,5 +298,5 @@ Retours bienvenus par les [issues](../../issues) du dépôt.
 
 - Licence MIT, voir [LICENSE](LICENSE).
 - OpenQiara : © Caligone et contributeurs ([dépôt d'origine](https://github.com/Caligone/openqiara)). Merci à lui : sans son travail, rien de ceci n'existerait. Les améliorations lui sont proposées dans le [ticket #64](https://github.com/Caligone/openqiara/issues/64) et par des PR successives (première : [#72](https://github.com/Caligone/openqiara/pull/72)).
-- OpenQIARA Claude V16 et QIARA Plus v10 : © 2026 Vins069. Écrits avec Claude (Anthropic).
+- OpenQIARA Claude V17 et QIARA Plus v10 : © 2026 Vins069. Écrits avec Claude (Anthropic).
 - Projet indépendant, affilié ni à Qiara, ni à Cofidur, ni à Free.
