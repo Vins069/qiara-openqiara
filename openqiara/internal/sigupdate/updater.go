@@ -228,9 +228,11 @@ func (u *Updater) reconcile() {
 // reconcileRunning, hors installation en cours : retient le plus grand seq constaté en service et
 // reconnaît qu'on l'a quitté (bouton « version précédente », réinstallation à la main, repli de
 // QIARA Plus). Sans cela, la vérification suivante réinstallerait la version qu'on vient d'écarter.
-// Pendant un essai (installation à la main), rien n'est conclu. Sous chk.
+// Pendant un essai (installation à la main), rien n'est conclu. Désactivée ou sans clé, rien n'est
+// écrit (fonction inerte : pas même /data/qp/sigupdate.json). Sous chk.
 func (u *Updater) reconcileRunning(trial bool) {
 	switch {
+	case len(u.Keys) == 0 || u.Settings == nil || !u.Settings().Enabled:
 	case trial:
 	case u.RunningSeq > u.st.InstalledSeq:
 		u.st.InstalledSeq = u.RunningSeq

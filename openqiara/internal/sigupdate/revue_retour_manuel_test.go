@@ -71,3 +71,17 @@ func TestInstalledSeqFirstStartAndTrial(t *testing.T) {
 		t.Errorf("retour de 17 à 16 : %+v", s)
 	}
 }
+
+// Désactivée (ou sans clé gravée), la mise à jour signée n'écrit rien au démarrage, même pour un
+// binaire qui porte un seq : la fonction reste inerte.
+func TestNothingWrittenWhileDisabled(t *testing.T) {
+	g := newRig(t)
+	g.settings.Enabled = false
+	g.restartAs(17)
+	g.u.Keys = nil
+	g.settings.Enabled = true
+	g.restartAs(18)
+	if _, err := loadStateFile(g.u.StatePath); err == nil {
+		t.Error("état écrit alors que la fonction est désactivée ou sans clé")
+	}
+}

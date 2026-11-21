@@ -32,3 +32,5 @@ func TestSaveStateCleansUpAndRoundTrips(t *testing.T) {
 		t.Error("fichier temporaire laissé après un succès")
 	}
 }
+
+func loadStateFile(p string) ([]byte, error) { return os.ReadFile(p) }
