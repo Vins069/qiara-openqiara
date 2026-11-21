@@ -40,7 +40,7 @@ func TestManifestStrictParsing(t *testing.T) {
 // \r, \n et NUL : séquences d'échappement de terminal, tabulations et inversion du sens d'écriture
 // passaient.
 func TestManifestVersionPrintable(t *testing.T) {
-	for _, v := range []string{"v1\x1b[31m", "v1\tx", "v1‮x", "v1\u0007", "v1​", strings.Repeat("v", 65), ""} {
+	for _, v := range []string{"v1\x1b[31m", "v1\tx", "v1\u202ex", "v1\u0007", "v1\u200b", strings.Repeat("v", 65), ""} {
 		m := goodManifest()
 		m.Version = v
 		if err := m.Validate(); !errors.Is(err, ErrBadManifest) {
