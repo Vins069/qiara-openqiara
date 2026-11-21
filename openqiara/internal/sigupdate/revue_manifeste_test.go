@@ -55,3 +55,17 @@ func TestManifestVersionPrintable(t *testing.T) {
 		}
 	}
 }
+
+// Un manifeste bien signé mais au contenu refusé (champ invalide) est une « version refusée », pas une
+// « signature refusée » (sur claude17 : echec-signature, libellé « Signature refusée » dans Home Assistant).
+func TestSignedButInvalidManifestIsRefused(t *testing.T) {
+	g := newRig(t)
+	g.rel.publish(5, fakeBinary(mb1, 1), func(m *Manifest) { m.Version = "v5\tessai" })
+	if got := g.check(t); got != ResRefused || g.rel.count("/openqiarad-test") != 0 {
+		t.Fatalf("résultat %q (%s)", got, g.u.Status().Message)
+	}
+	g.rel.files["/update.json.sig"] = EncodeSignature(make([]byte, ed25519.SignatureSize))
+	if got := g.check(t); got != ResSignature {
+		t.Fatalf("signature fausse : %q", got)
+	}
+}

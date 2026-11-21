@@ -180,7 +180,7 @@ notifie l'essai, l'installation, le retour arrière et les refus.
 | `desactivee` | `enabled` faux |
 | `echec-reseau` | dépôt injoignable, fichier absent (release sans `update.json`), réponse trop grosse, somme ou taille du binaire différentes de celles signées |
 | `echec-signature` | signature absente, fausse, ou clé non gravée |
-| `refusee` | canal différent, `seq` plus ancien que le plus récent vu, `min_seq` non atteint, version déjà revenue en arrière |
+| `refusee` | manifeste bien signé mais invalide (champ hors règles), canal différent, `seq` plus ancien que le plus récent vu, `min_seq` non atteint, version déjà revenue en arrière ou quittée |
 | `attente` | alarme armée ou état inconnu, essai de QIARA Plus en cours, QIARA Plus absent ou incomplet, place insuffisante ou illisible, relance non faite par QIARA Plus (essai annulé) |
 | `installation` | version déposée chez QIARA Plus ; essai en cours |
 | `installee` / `retour-arriere` | issue de l'essai, constatée au démarrage suivant ou à la vérification suivante ; `retour-arriere` aussi quand on est revenu à une version antérieure (bouton, réinstallation) |

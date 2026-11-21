@@ -293,6 +293,9 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 		return u.note(ResNetwork, "lecture du manifeste impossible : "+err.Error(), true)
 	}
 	m, err := Verify(u.Keys, mb.Bytes(), sb.Bytes())
+	if errors.Is(err, ErrBadManifest) { // signature valide, contenu refusé : pas une « signature refusée »
+		return u.note(ResRefused, err.Error(), true)
+	}
 	if err != nil {
 		return u.note(ResSignature, err.Error(), true)
 	}
