@@ -369,6 +369,11 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 	err = u.Stage(sctx, final, m.SHA256)
 	scancel()
 	if err != nil {
+		// Aucun essai n'était en cours avant le dépôt : s'il en reste un (outil arrêté par son délai après
+		// avoir posé le marqueur), c'est le nôtre, à moitié posé ; il partirait au prochain démarrage venu.
+		if u.Trial != nil && u.Trial() {
+			u.undo(ctx)
+		}
 		return u.note(ResError, "dépôt chez QIARA Plus refusé : "+err.Error(), true)
 	}
 	if !u.Disarmed() { // l'essai est déposé mais l'application n'a pas été relancée : on l'annule

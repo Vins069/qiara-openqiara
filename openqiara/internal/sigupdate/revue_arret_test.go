@@ -33,3 +33,20 @@ func TestStageNotInterruptedByShutdown(t *testing.T) {
 		t.Errorf("annulation : %d, contexte %v", g.rollbacks, rollbackErr)
 	}
 }
+
+// Un dépôt en échec qui a pourtant posé l'essai (qp-update arrêté par son délai après l'écriture du
+// marqueur) est annulé ; sur claude17 l'essai restait posé, sans relance ni annulation.
+func TestStageFailureAfterTrialMarkerIsUndone(t *testing.T) {
+	g := newRig(t)
+	g.u.Stage = func(context.Context, string, string) error { g.trial.Store(true); return errTest }
+	g.u.Rollback = func(context.Context) error { g.rollbacks++; g.trial.Store(false); return nil }
+	g.rel.publish(5, fakeBinary(mb1, 1), nil)
+	if got := g.check(t); got != ResError || g.rollbacks != 1 || g.trial.Load() || g.restarts != 0 {
+		t.Fatalf("résultat %q, annulations %d, essai %v, relances %d", got, g.rollbacks, g.trial.Load(), g.restarts)
+	}
+	// un dépôt refusé sans essai posé n'annule rien
+	g.u.Stage = func(context.Context, string, string) error { return errTest }
+	if got := g.check(t); got != ResError || g.rollbacks != 1 {
+		t.Fatalf("résultat %q, annulations %d", got, g.rollbacks)
+	}
+}

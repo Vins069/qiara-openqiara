@@ -27,7 +27,8 @@ ajouts de la distribution et le lanceur de QIARA Plus.
    HTTPS avec les autorités de certification embarquées, au plus 5 redirections, en HTTPS, limitées à
    `github.com`, `*.github.com` et `*.githubusercontent.com`, délai de 10 minutes. Taille et SHA-256 doivent être ceux du manifeste signé.
 6. Il redemande l'état de l'alarme, puis lance `qp-update stage <fichier> <sha256>` : QIARA Plus contrôle que c'est un
-   ELF ARM 32 bits de taille plausible, le place dans `new` et pose l'essai.
+   ELF ARM 32 bits de taille plausible, le place dans `new` et pose l'essai. `qp-update` n'est jamais interrompu par
+   un arrêt d'`openqiarad` (seul son délai de 3 minutes l'arrête) ; un dépôt en échec qui aurait posé l'essai l'annule.
 7. Il redemande l'alarme une dernière fois, puis laisse l'ordre `restart-app` au surveillant de QIARA Plus.
    Si l'alarme s'est armée entre-temps, ou si l'ordre ne peut pas être donné, l'essai déposé est **annulé**
    (`qp-update rollback`) : la caméra reste sur sa version. L'ordre est ensuite **suivi** : tant qu'il attend le
