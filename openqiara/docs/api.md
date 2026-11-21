@@ -236,9 +236,13 @@ n'installe que ce qu'une clé de publication gravée dans le binaire a signé
 (Ed25519, `seq` strictement croissant). Le binaire n'est jamais écrit par
 openqiarad : il est déposé chez QIARA Plus (`qp-update stage`, essai,
 validation par la santé, retour arrière automatique, ordre `restart-app`).
-Désactivée par défaut ; `PUT` répond `409` pour activer tant qu'aucune clé
-n'est gravée ou que QIARA Plus manque, `400` pour un champ invalide ou un
-`repo` absent. Voir `docs/mise-a-jour-signee.md`.
+La relance n'a lieu que si le flux vidéo coule (cache ouvert), et la version
+installée contrôle son propre flux : sans flux, retour à la précédente.
+Réglages de la distribution : activée, dépôt `Vins069/qiara-openqiara`
+(`repo` vide y revient), toutes les 12 h ; inerte tant qu'aucune clé n'est
+gravée. `PUT` répond `409` à une demande d'activation tant qu'aucune clé
+n'est gravée ou que QIARA Plus manque, `400` pour un champ invalide ; couper
+(`{"enabled":false}`) est toujours possible. Voir `docs/mise-a-jour-signee.md`.
 
 ---
 

@@ -30,7 +30,7 @@ type Config struct {
 	Web     WebConfig     `json:"web"`
 	Alarm   AlarmConfig   `json:"alarm"`
 	Update  UpdateConfig  `json:"update"`
-	// SignedUpdate : mise à jour automatique signée d'OpenQIARA Claude (désactivée par défaut).
+	// SignedUpdate : mise à jour automatique signée d'OpenQIARA Claude (activée par défaut, inerte sans clé gravée).
 	SignedUpdate SignedUpdateConfig `json:"signed_update,omitzero"`
 	Sensors      []SensorEntry      `json:"sensors,omitempty"`
 	DeletedIDs   []int              `json:"deleted_ids,omitempty"`
@@ -173,15 +173,34 @@ type UpdateConfig struct {
 }
 
 // SignedUpdateConfig règle la mise à jour signée (paquet sigupdate). Sans effet tant qu'aucune
-// clé de publication n'est gravée dans le binaire, et sans QIARA Plus. Désactivée par défaut.
+// clé de publication n'est gravée dans le binaire, et sans QIARA Plus. Réglages de la distribution
+// OpenQIARA Claude (choix du propriétaire, 21/11/2026) : activée, dépôt DefaultSignedUpdateRepo, 12 h.
+// Un champ absent prend la valeur par défaut : un fichier sans signed_update (V16, retour arrière) ne
+// change pas de forme, et seule une coupure voulue (enabled: false) est écrite.
 type SignedUpdateConfig struct {
-	Enabled bool `json:"enabled"`
-	// Repo : « propriétaire/dépôt » GitHub dont la dernière release porte update.json et sa signature.
+	// Enabled : absent (nil), activée ; false, coupée par le propriétaire. Lire IsEnabled.
+	Enabled *bool `json:"enabled,omitempty"`
+	// Repo : « propriétaire/dépôt » GitHub dont la dernière release porte update.json et sa signature ;
+	// vide, DefaultSignedUpdateRepo. Lire EffectiveRepo.
 	Repo string `json:"repo,omitempty"`
 	// Channel : « stable » si vide.
 	Channel string `json:"channel,omitempty"`
 	// IntervalHours : entre deux vérifications, de 6 à 168 ; 0 = 12 h.
 	IntervalHours int `json:"interval_hours,omitempty"`
+}
+
+// DefaultSignedUpdateRepo : dépôt de la distribution OpenQIARA Claude, d'où viennent les versions signées.
+const DefaultSignedUpdateRepo = "Vins069/qiara-openqiara"
+
+// IsEnabled : activée sauf coupure voulue (enabled: false).
+func (c SignedUpdateConfig) IsEnabled() bool { return c.Enabled == nil || *c.Enabled }
+
+// EffectiveRepo : le dépôt réglé, ou celui de la distribution.
+func (c SignedUpdateConfig) EffectiveRepo() string {
+	if c.Repo == "" {
+		return DefaultSignedUpdateRepo
+	}
+	return c.Repo
 }
 
 // AlarmConfig selects the alarm operating mode and related settings.

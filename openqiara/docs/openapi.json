@@ -1408,7 +1408,7 @@
         ],
         "summary": "Lire la mise à jour signée",
         "operationId": "getSignedUpdate",
-        "description": "Réglages et état de la mise à jour automatique signée d'OpenQIARA Claude (désactivée par défaut). Sans clé de publication gravée dans le binaire ou sans QIARA Plus, `available` est faux et rien n'est jamais installé.",
+        "description": "Réglages et état de la mise à jour automatique signée d'OpenQIARA Claude (activée par défaut, dépôt `Vins069/qiara-openqiara`, toutes les 12 h). Sans clé de publication gravée dans le binaire ou sans QIARA Plus, `available` est faux et rien n'est jamais installé.",
         "responses": {
           "200": {
             "description": "Réglages, disponibilité et dernier état.",
@@ -1419,10 +1419,10 @@
                 },
                 "examples": {
                   "inactive": {
-                    "summary": "Livrée, désactivée, sans clé gravée",
+                    "summary": "Réglages de la distribution, sans clé gravée (inerte)",
                     "value": {
-                      "enabled": false,
-                      "repo": "",
+                      "enabled": true,
+                      "repo": "Vins069/qiara-openqiara",
                       "channel": "stable",
                       "interval_hours": 12,
                       "available": false,
@@ -3281,11 +3281,13 @@
         "properties": {
           "enabled": {
             "type": "boolean",
-            "default": false
+            "default": true,
+            "description": "Activée sauf coupure (`enabled: false`) ; sans effet tant que `available` est faux."
           },
           "repo": {
             "type": "string",
-            "description": "`propriétaire/dépôt` GitHub. Vide tant qu'il n'est pas réglé."
+            "default": "Vins069/qiara-openqiara",
+            "description": "`propriétaire/dépôt` GitHub ; celui de la distribution s'il n'est pas réglé."
           },
           "channel": {
             "type": "string",
@@ -3309,7 +3311,7 @@
       },
       "SignedUpdatePatch": {
         "type": "object",
-        "description": "Au moins un champ. Activer (`enabled: true`) exige `available` et un `repo`.",
+        "description": "Au moins un champ. Demander l'activation (`enabled: true`) exige `available` ; les autres réglages se changent toujours.",
         "additionalProperties": false,
         "properties": {
           "enabled": {
@@ -3317,7 +3319,7 @@
           },
           "repo": {
             "type": "string",
-            "description": "`propriétaire/dépôt` GitHub ; vide pour l'effacer (refusé si `enabled` est ou devient vrai).",
+            "description": "`propriétaire/dépôt` GitHub ; vide pour revenir au dépôt de la distribution (`Vins069/qiara-openqiara`).",
             "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$"
           },
           "channel": {
@@ -3389,6 +3391,10 @@
           "failed_seq": {
             "type": "integer",
             "description": "Plus grand `seq` revenu en arrière : jamais réessayé."
+          },
+          "video_seq": {
+            "type": "integer",
+            "description": "Version signée installée dont le flux vidéo n'est pas encore constaté (contrôle à l'ouverture du cache ; sans flux, retour à la version précédente)."
           }
         }
       }

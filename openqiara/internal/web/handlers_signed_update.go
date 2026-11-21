@@ -19,14 +19,14 @@ type signedUpdateView struct {
 	Channel       string `json:"channel"`
 	IntervalHours int    `json:"interval_hours"`
 	// Available : au moins une clé de publication gravée ET QIARA Plus installé.
-	// Sans cela, enabled ne peut pas passer à vrai et rien n'est jamais installé.
+	// Sans cela, rien n'est jamais installé (enabled peut valoir vrai : c'est le réglage par défaut).
 	Available bool             `json:"available"`
 	Status    sigupdate.Status `json:"status"`
 }
 
 func (s *Server) signedView(su *sigupdate.Updater) signedUpdateView {
 	c := s.store.Get().SignedUpdate
-	v := signedUpdateView{Enabled: c.Enabled, Repo: c.Repo, Channel: c.Channel, IntervalHours: c.IntervalHours}
+	v := signedUpdateView{Enabled: c.IsEnabled(), Repo: c.EffectiveRepo(), Channel: c.Channel, IntervalHours: c.IntervalHours}
 	if v.Channel == "" {
 		v.Channel = "stable"
 	}
@@ -49,7 +49,8 @@ func (s *Server) handleGetSignedUpdate(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handlePutSignedUpdate modifie les réglages (champs absents : inchangés). Pris en compte à la
-// prochaine vérification, sans redémarrage. Activer exige une clé gravée, QIARA Plus et un dépôt.
+// prochaine vérification, sans redémarrage. Activer exige une clé gravée et QIARA Plus ; repo vide
+// revient au dépôt de la distribution (config.DefaultSignedUpdateRepo).
 // Cette route ne déclenche aucune installation : seule la vérification périodique, alarme
 // désarmée, installe. L'installation automatique de l'amont (PUT /config/update) reste refusée.
 func (s *Server) handlePutSignedUpdate(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +77,7 @@ func (s *Server) handlePutSignedUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	next := s.store.Get().SignedUpdate
 	if body.Enabled != nil {
-		next.Enabled = *body.Enabled
+		next.Enabled = body.Enabled
 	}
 	if body.Repo != nil {
 		if *body.Repo != "" && !sigupdate.RepoRe.MatchString(*body.Repo) {
@@ -100,7 +101,9 @@ func (s *Server) handlePutSignedUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		next.IntervalHours = h
 	}
-	if next.Enabled {
+	// Seule une demande d'activation est contrôlée : activée par défaut, la fonction se règle aussi
+	// sur un binaire sans clé (elle y reste inerte).
+	if body.Enabled != nil && *body.Enabled {
 		st := su.Status()
 		switch {
 		case st.Keys == 0:
@@ -108,9 +111,6 @@ func (s *Server) handlePutSignedUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		case !qplusInstalled():
 			writeErr(w, http.StatusConflict, "Mise à jour signée indisponible : QIARA Plus n'est pas installé (c'est lui qui installe, essaie et annule).")
-			return
-		case next.Repo == "":
-			writeErr(w, http.StatusBadRequest, "repo requis pour activer (forme « propriétaire/dépôt »)")
 			return
 		}
 	}

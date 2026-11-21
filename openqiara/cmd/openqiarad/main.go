@@ -640,7 +640,7 @@ func main() {
 		First:    10 * time.Minute,
 	}, logger)
 
-	// Mise à jour signée (OpenQIARA Claude) : désactivée par défaut, sans effet tant qu'aucune clé de
+	// Mise à jour signée (OpenQIARA Claude) : activée par défaut, sans effet tant qu'aucune clé de
 	// publication n'est gravée (internal/sigupdate/keys.go). Elle ne remplace jamais /data/openqiarad :
 	// elle dépose le binaire chez QIARA Plus (qp-update stage) puis demande la relance (restart-app),
 	// uniquement alarme désarmée et état connu ; l'essai, la validation et le retour arrière sont ceux de QIARA Plus.
@@ -649,7 +649,7 @@ func main() {
 		Paths:      qplus.Default,
 		Settings: func() sigupdate.Settings {
 			c := store.Get().SignedUpdate
-			return sigupdate.Settings{Enabled: c.Enabled, Repo: c.Repo, Channel: c.Channel, Every: time.Duration(c.IntervalHours) * time.Hour}
+			return sigupdate.Settings{Enabled: c.IsEnabled(), Repo: c.EffectiveRepo(), Channel: c.Channel, Every: time.Duration(c.IntervalHours) * time.Hour}
 		},
 		Disarmed: func() bool { return getAlarmState() == string(alarm.StateDisarmed) },
 		Logger:   logger,

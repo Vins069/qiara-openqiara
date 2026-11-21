@@ -30,7 +30,7 @@ func signedServer(t *testing.T, withKey, qplus, attach bool) (*Server, *config.S
 		u := &sigupdate.Updater{StatePath: filepath.Join(t.TempDir(), "s.json"),
 			Settings: func() sigupdate.Settings {
 				c := store.Get().SignedUpdate
-				return sigupdate.Settings{Enabled: c.Enabled, Repo: c.Repo}
+				return sigupdate.Settings{Enabled: c.IsEnabled(), Repo: c.EffectiveRepo()}
 			}}
 		if withKey {
 			pub, _, _ := ed25519.GenerateKey(rand.Reader)
@@ -71,7 +71,9 @@ func TestSignedUpdateAPIDefaults(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &v); err != nil {
 		t.Fatal(err)
 	}
-	if v.Enabled || v.Available || v.Channel != "stable" || v.IntervalHours != 12 || v.Status.Keys != 0 {
+	// réglages de la distribution : activée, dépôt de Vincent, 12 h ; inerte ici (aucune clé gravée)
+	if !v.Enabled || v.Repo != "Vins069/qiara-openqiara" || v.Available || v.Channel != "stable" ||
+		v.IntervalHours != 12 || v.Status.Keys != 0 || v.Status.Active {
 		t.Errorf("valeurs par défaut inattendues : %+v", v)
 	}
 }
@@ -85,12 +87,14 @@ func TestSignedUpdateAPIEnableRules(t *testing.T) {
 		wantEnabledNow bool
 	}
 	for _, c := range []tc{
-		{"sans clé gravée : refusé", false, true, `{"enabled":true,"repo":"Vins069/x"}`, http.StatusConflict, false},
-		{"sans QIARA Plus : refusé", true, false, `{"enabled":true,"repo":"Vins069/x"}`, http.StatusConflict, false},
-		{"sans dépôt : refusé", true, true, `{"enabled":true}`, http.StatusBadRequest, false},
+		// refusées, les demandes laissent le réglage par défaut (activée) inchangé
+		{"sans clé gravée : refusé", false, true, `{"enabled":true,"repo":"Vins069/x"}`, http.StatusConflict, true},
+		{"sans QIARA Plus : refusé", true, false, `{"enabled":true,"repo":"Vins069/x"}`, http.StatusConflict, true},
+		{"sans dépôt : celui de la distribution", true, true, `{"enabled":true}`, http.StatusOK, true},
 		{"tout est là : activée", true, true, `{"enabled":true,"repo":"Vins069/x","interval_hours":24,"channel":"beta"}`, http.StatusOK, true},
 		{"couper reste possible sans clé", false, false, `{"enabled":false}`, http.StatusOK, false},
-		{"régler sans activer, sans clé", false, true, `{"repo":"Vins069/x"}`, http.StatusOK, false},
+		{"régler sans clé (activée par défaut, inerte)", false, true, `{"repo":"Vins069/x"}`, http.StatusOK, true},
+		{"régler l'intervalle sans clé", false, false, `{"interval_hours":24}`, http.StatusOK, true},
 	} {
 		_, store, h := signedServer(t, c.key, c.qplus, true)
 		rec := call(h, http.MethodPut, c.body)
@@ -98,7 +102,7 @@ func TestSignedUpdateAPIEnableRules(t *testing.T) {
 			t.Errorf("%s : code %d (%s), attendu %d", c.name, rec.Code, rec.Body.String(), c.want)
 			continue
 		}
-		if got := store.Get().SignedUpdate.Enabled; got != c.wantEnabledNow {
+		if got := store.Get().SignedUpdate.IsEnabled(); got != c.wantEnabledNow {
 			t.Errorf("%s : enabled enregistré = %v", c.name, got)
 		}
 	}
@@ -127,9 +131,8 @@ func TestSignedUpdateAPIValidationAndPersistence(t *testing.T) {
 		t.Fatalf("code %d : %s", rec.Code, rec.Body.String())
 	}
 	got := store.Get().SignedUpdate
-	want := config.SignedUpdateConfig{Enabled: true, Repo: "Vins069/qiara-openqiara", IntervalHours: 48}
-	if got != want {
-		t.Errorf("réglages %+v, attendu %+v", got, want)
+	if !got.IsEnabled() || got.Enabled == nil || got.Repo != "Vins069/qiara-openqiara" || got.IntervalHours != 48 {
+		t.Errorf("réglages %+v", got)
 	}
 	// la lecture renvoie l'état
 	var v signedUpdateView
@@ -179,5 +182,24 @@ func TestSignedUpdateAttachWhileServing(t *testing.T) {
 	<-done
 	if rec := call(h, http.MethodGet, ""); rec.Code != http.StatusOK {
 		t.Errorf("après rattachement : code %d", rec.Code)
+	}
+}
+
+// Couper, puis remettre le dépôt de la distribution par un repo vide : les deux se lisent ensuite.
+func TestSignedUpdateAPIDisableAndDefaultRepo(t *testing.T) {
+	_, store, h := signedServer(t, false, true, true)
+	if rec := call(h, http.MethodPut, `{"enabled":false,"repo":"a/b"}`); rec.Code != http.StatusOK {
+		t.Fatalf("code %d : %s", rec.Code, rec.Body.String())
+	}
+	if store.Get().SignedUpdate.IsEnabled() {
+		t.Fatal("coupure non prise en compte")
+	}
+	if rec := call(h, http.MethodPut, `{"repo":""}`); rec.Code != http.StatusOK {
+		t.Fatalf("code %d : %s", rec.Code, rec.Body.String())
+	}
+	var v signedUpdateView
+	json.Unmarshal(call(h, http.MethodGet, "").Body.Bytes(), &v)
+	if v.Enabled || v.Repo != "Vins069/qiara-openqiara" {
+		t.Errorf("lecture : %+v", v)
 	}
 }
