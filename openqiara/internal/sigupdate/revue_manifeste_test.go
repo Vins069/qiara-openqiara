@@ -35,3 +35,23 @@ func TestManifestStrictParsing(t *testing.T) {
 		t.Errorf("manifeste correct refusé : %v", err)
 	}
 }
+
+// Revue V17 : la version (journal, MQTT, notifications) n'admettait sur claude17 que l'exclusion de
+// \r, \n et NUL : séquences d'échappement de terminal, tabulations et inversion du sens d'écriture
+// passaient.
+func TestManifestVersionPrintable(t *testing.T) {
+	for _, v := range []string{"v1\x1b[31m", "v1\tx", "v1‮x", "v1\u0007", "v1​", strings.Repeat("v", 65), ""} {
+		m := goodManifest()
+		m.Version = v
+		if err := m.Validate(); !errors.Is(err, ErrBadManifest) {
+			t.Errorf("version %q acceptée", v)
+		}
+	}
+	for _, v := range []string{"v0.1.0-rc.25-claude-v17", "V17 (essai n°2) — 21/11", "v1+build.7"} {
+		m := goodManifest()
+		m.Version = v
+		if err := m.Validate(); err != nil {
+			t.Errorf("version %q refusée : %v", v, err)
+		}
+	}
+}

@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -189,8 +190,8 @@ func (m *Manifest) Validate() error {
 		return bad("seq %d (>= 1 attendu)", m.Seq)
 	case m.MinSeq < 0 || m.MinSeq > m.Seq:
 		return bad("min_seq %d hors de [0, seq]", m.MinSeq)
-	case m.Version == "" || len(m.Version) > 64 || strings.ContainsAny(m.Version, "\r\n\x00"):
-		return bad("version")
+	case !printableVersion(m.Version):
+		return bad("version (1 à 64 octets, caractères imprimables)")
 	case !assetRe.MatchString(m.Asset):
 		return bad("nom de fichier %q", m.Asset)
 	case !shaRe.MatchString(m.SHA256):
@@ -204,6 +205,21 @@ func (m *Manifest) Validate() error {
 		}
 	}
 	return nil
+}
+
+// printableVersion : la version est écrite dans le journal, en MQTT (« Dernière version signée vue »)
+// et dans les notifications de Home Assistant : texte imprimable seulement (ni tabulation, ni
+// séquence d'échappement de terminal, ni caractère de contrôle de mise en forme ou de sens d'écriture).
+func printableVersion(v string) bool {
+	if v == "" || len(v) > 64 || !utf8.ValidString(v) {
+		return false
+	}
+	for _, r := range v {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // ManifestName est le nom du manifeste d'un canal : update.json pour « stable »,
