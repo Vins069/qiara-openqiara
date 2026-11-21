@@ -3,7 +3,6 @@
 package sigupdate
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -86,11 +85,55 @@ func freeSpace(dir string) (uint64, error) {
 	return uint64(st.Bavail) * uint64(st.Bsize), nil
 }
 
-// runTool lance « sh qp-update args… » ; en cas d'échec, la fin de sa sortie sert de message.
+// shellPath : le shell de la caméra (busybox), sans dépendre du PATH du daemon.
+const shellPath = "/bin/sh"
+
+// toolEnvDrop : réglages d'essai de qp-update qui contournent ses contrôles (essai en cours, place,
+// bornes de taille, lien au lieu de copie). Jamais transmis, même présents dans l'environnement du daemon.
+var toolEnvDrop = []string{"QP_FORCE", "QP_FAKE_FREE", "QP_LINK", "QP_MIN_SIZE", "QP_MAX_SIZE", "QP_SAFETY_KB"}
+
+func toolEnv(env []string) []string {
+	out := env[:0:0]
+next:
+	for _, kv := range env {
+		for _, k := range toolEnvDrop {
+			if strings.HasPrefix(kv, k+"=") {
+				continue next
+			}
+		}
+		out = append(out, kv)
+	}
+	return out
+}
+
+// tailBuffer garde les derniers max octets écrits : la fin de la sortie de qp-update sert de message,
+// et une sortie démesurée ne doit pas remplir la mémoire de la caméra.
+type tailBuffer struct {
+	b   []byte
+	max int
+}
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	n := len(p)
+	if len(p) > t.max {
+		p = p[len(p)-t.max:]
+	}
+	t.b = append(t.b, p...)
+	if len(t.b) > t.max {
+		copy(t.b, t.b[len(t.b)-t.max:])
+		t.b = t.b[:t.max]
+	}
+	return n, nil
+}
+
+func (t *tailBuffer) String() string { return string(t.b) }
+
+// runTool lance « /bin/sh qp-update args… » ; en cas d'échec, la fin de sa sortie sert de message.
 func runTool(ctx context.Context, tool string, args ...string) error {
-	var out bytes.Buffer
-	cmd := exec.CommandContext(ctx, "sh", append([]string{tool}, args...)...)
-	cmd.Stdout, cmd.Stderr = &out, &out
+	out := &tailBuffer{max: 4 << 10}
+	cmd := exec.CommandContext(ctx, shellPath, append([]string{tool}, args...)...)
+	cmd.Stdout, cmd.Stderr = out, out
+	cmd.Env = toolEnv(os.Environ())
 	cmd.WaitDelay = 5 * time.Second
 	if err := cmd.Run(); err != nil {
 		msg := strings.TrimSpace(out.String())
@@ -100,7 +143,7 @@ func runTool(ctx context.Context, tool string, args ...string) error {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return fmt.Errorf("%s", oneLine(msg))
+		return fmt.Errorf("%s", oneLine(strings.ToValidUTF8(msg, "")))
 	}
 	return nil
 }

@@ -216,3 +216,42 @@ func TestRealQPUpdateToolMissing(t *testing.T) {
 		t.Error("binaire téléchargé alors que qp-update manque")
 	}
 }
+
+// Revue V17 : les réglages d'essai de qp-update qui contournent ses contrôles ne lui sont jamais
+// transmis (sur claude17 l'environnement du daemon passait tel quel, QP_FORCE compris) ; les chemins
+// (QP, QP_BULK…) le sont.
+func TestRunToolEnvironmentSanitized(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "outil.sh")
+	os.WriteFile(script, []byte(`echo "force=[$QP_FORCE] free=[$QP_FAKE_FREE] link=[$QP_LINK] max=[$QP_MAX_SIZE] qp=[$QP]" >&2; exit 1`+"\n"), 0o644)
+	t.Setenv("QP_FORCE", "1")
+	t.Setenv("QP_FAKE_FREE", "999999")
+	t.Setenv("QP_LINK", "1")
+	t.Setenv("QP_MAX_SIZE", "99999999999")
+	t.Setenv("QP", "/x/qp")
+	err := runTool(context.Background(), script)
+	if err == nil || err.Error() != "force=[] free=[] link=[] max=[] qp=[/x/qp]" {
+		t.Fatalf("environnement transmis à qp-update : %v", err)
+	}
+}
+
+// La sortie gardée est bornée (4 Kio) et le message en est la fin, en UTF-8 valide.
+func TestRunToolOutputBounded(t *testing.T) {
+	tb := &tailBuffer{max: 8}
+	tb.Write([]byte("abc"))
+	tb.Write([]byte("defghij"))
+	if tb.String() != "cdefghij" {
+		t.Errorf("fin gardée %q", tb.String())
+	}
+	tb.Write([]byte("0123456789XYZ"))
+	if tb.String() != "56789XYZ" {
+		t.Errorf("fin gardée %q", tb.String())
+	}
+	dir := t.TempDir()
+	script := filepath.Join(dir, "bavard.sh")
+	os.WriteFile(script, []byte("i=0; while [ $i -lt 2000 ]; do echo 'ligne de remplissage assez longue pour dépasser la borne'; i=$((i+1)); done; echo 'ERREUR: fin' >&2; exit 1\n"), 0o644)
+	err := runTool(context.Background(), script)
+	if err == nil || !strings.HasSuffix(err.Error(), "ERREUR: fin") || len(err.Error()) > 300 {
+		t.Fatalf("message %v", err)
+	}
+}
