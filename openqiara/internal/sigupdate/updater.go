@@ -324,16 +324,24 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 			return u.note(ResWaiting, "QIARA Plus indisponible : "+err.Error(), true)
 		}
 	}
+	// Place : le dossier de dépôt est créé d'abord (sinon, à la première fois, la place n'était pas lue),
+	// et il faut deux fois le binaire sur la carte : le fichier téléchargé, puis la copie que qp-update
+	// fait dans l'emplacement new avant que le premier soit effacé. Place illisible : on attend.
+	if err := os.MkdirAll(u.IncomingDir, 0o755); err != nil {
+		return u.note(ResError, "dossier de dépôt : "+err.Error(), true)
+	}
 	if u.FreeSpace != nil {
-		if free, err := u.FreeSpace(u.IncomingDir); err == nil && free < uint64(m.Size)+reserveBytes {
-			return u.note(ResWaiting, fmt.Sprintf("place insuffisante (%d Mo libres)", free>>20), true)
+		need := 2*uint64(m.Size) + reserveBytes
+		free, err := u.FreeSpace(u.IncomingDir)
+		if err != nil {
+			return u.note(ResWaiting, "place libre illisible : "+err.Error(), true)
+		}
+		if free < need {
+			return u.note(ResWaiting, fmt.Sprintf("place insuffisante (%d Mo libres, %d Mo nécessaires)", free>>20, need>>20), true)
 		}
 	}
 
 	// Téléchargement borné, somme contrôlée au fil de l'eau.
-	if err := os.MkdirAll(u.IncomingDir, 0o755); err != nil {
-		return u.note(ResError, "dossier de dépôt : "+err.Error(), true)
-	}
 	u.cleanIncoming()
 	final := filepath.Join(u.IncomingDir, fmt.Sprintf("sig-%d.bin", m.Seq))
 	part := final + ".part"
