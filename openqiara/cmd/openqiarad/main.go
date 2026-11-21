@@ -653,6 +653,11 @@ func main() {
 		},
 		Disarmed: func() bool { return getAlarmState() == string(alarm.StateDisarmed) },
 		Logger:   logger,
+		// Flux vidéo : cache ouvert, des images du codec réglé avec une image clé (video_probe.go).
+		ShutterOpen: func() bool { return !store.Get().ShutterClosed },
+		VideoProbe: func(ctx context.Context, wait time.Duration) error {
+			return probeVideo(ctx, mediaHub, codecState.Configured(), wait)
+		},
 	})
 	signedUpd.Store(su)
 	if webSrv != nil {
@@ -858,6 +863,10 @@ func main() {
 		h := qplus.Health{OK: err == nil, Version: BuildInfo()}
 		if err != nil {
 			h.Err = err.Error()
+		} else if why := su.HealthHold(); why != "" {
+			// Essai d'une version signée dont le flux vidéo n'est pas encore constaté : QIARA Plus ne la
+			// valide pas avant (internal/sigupdate/video.go).
+			h.OK, h.Err = false, why
 		}
 		if mqttPub != nil {
 			// LinkUp, not IsConnected: no lock (a publish stuck under the

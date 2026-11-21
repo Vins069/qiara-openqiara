@@ -113,7 +113,7 @@ var signedUpdateLabels = map[string]string{
 	sigupdate.ResDisabled:   "Désactivée",
 	sigupdate.ResNoKey:      "Inactive (aucune clé de publication)",
 	sigupdate.ResUpToDate:   "À jour",
-	sigupdate.ResWaiting:    "En attente (alarme, essai ou QIARA Plus)",
+	sigupdate.ResWaiting:    "En attente (alarme, essai, QIARA Plus ou flux vidéo)",
 	sigupdate.ResNetwork:    "Dépôt injoignable ou réponse refusée",
 	sigupdate.ResSignature:  "Signature refusée",
 	sigupdate.ResRefused:    "Version refusée",

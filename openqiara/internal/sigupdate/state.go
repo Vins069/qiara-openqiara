@@ -25,6 +25,8 @@ type State struct {
 	// inférieur signifie qu'on l'a quittée (bouton « version précédente » de QIARA Plus, réinstallation à
 	// la main, repli de QIARA Plus) : elle n'est alors pas réinstallée automatiquement.
 	InstalledSeq int64 `json:"installed_seq,omitempty"`
+	// VideoSeq : version signée installée dont le flux vidéo n'est pas encore constaté (video.go).
+	VideoSeq int64 `json:"video_seq,omitempty"`
 }
 
 // Codes de résultat.
@@ -32,7 +34,7 @@ const (
 	ResDisabled   = "desactivee"
 	ResNoKey      = "pas-de-cle"
 	ResUpToDate   = "a-jour"
-	ResWaiting    = "attente"      // alarme armée ou état inconnu, essai en cours, QIARA Plus absent
+	ResWaiting    = "attente"      // alarme armée ou état inconnu, essai en cours, QIARA Plus absent, flux vidéo absent
 	ResNetwork    = "echec-reseau" // dépôt injoignable, réponse invalide ou trop grosse
 	ResSignature  = "echec-signature"
 	ResRefused    = "refusee"      // seq/canal/min_seq/échec antérieur

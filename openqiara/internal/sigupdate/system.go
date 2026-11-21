@@ -29,6 +29,9 @@ type SystemConfig struct {
 	Settings   func() Settings
 	Disarmed   func() bool
 	Logger     *slog.Logger
+	// Contrôle du flux vidéo (video.go) : cache ouvert, et écoute du flux pendant au plus wait.
+	ShutterOpen func() bool
+	VideoProbe  func(ctx context.Context, wait time.Duration) error
 }
 
 // NewSystem branche l'Updater sur la caméra : clés gravées, HTTPS à autorités
@@ -72,8 +75,11 @@ func NewSystem(c SystemConfig) *Updater {
 		Rollback: func(ctx context.Context) error {
 			return runTool(ctx, p.UpdateTool(), "rollback", "mise à jour signée annulée")
 		},
-		FreeSpace: freeSpace,
-		Log:       c.Logger,
+		UsePrev:     func(ctx context.Context) error { return runTool(ctx, p.UpdateTool(), "use-prev") },
+		ShutterOpen: c.ShutterOpen,
+		VideoProbe:  c.VideoProbe,
+		FreeSpace:   freeSpace,
+		Log:         c.Logger,
 	}
 }
 

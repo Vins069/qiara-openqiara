@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -65,6 +66,18 @@ type Updater struct {
 	Now           func() time.Time
 	Log           *slog.Logger
 
+	// Contrôle du flux vidéo (video.go). VideoProbe nil : aucun contrôle. ShutterOpen nil : cache
+	// toujours ouvert. UsePrev : retour à la version précédente d'une version déjà validée.
+	ShutterOpen func() bool
+	VideoProbe  func(ctx context.Context, wait time.Duration) error
+	UsePrev     func(ctx context.Context) error
+	// Délais du contrôle (défauts : 20 s avant la relance ; après, écoutes de 30 s, retour après 5 min
+	// sans flux cache ouvert, attente de 10 s entre deux lectures).
+	VideoPreWait  time.Duration
+	VideoWindow   time.Duration
+	VideoDeadline time.Duration
+	VideoPoll     time.Duration
+
 	First           time.Duration
 	ManifestTimeout time.Duration
 	DownloadTimeout time.Duration
@@ -81,6 +94,8 @@ type Updater struct {
 	smu       sync.Mutex // verrou court : l'instantané lu par Status, jamais tenu pendant le réseau
 	pub       State
 	pubLoaded bool
+
+	hold atomic.Pointer[string] // santé retenue « non valide » (HealthHold)
 }
 
 // Status : l'état exposé par l'API, le diagnostic QIARA Plus et MQTT.
@@ -95,6 +110,7 @@ type Status struct {
 	SeenVersion string `json:"seen_version,omitempty"`
 	PendingSeq  int64  `json:"pending_seq,omitempty"`
 	FailedSeq   int64  `json:"failed_seq,omitempty"`
+	VideoSeq    int64  `json:"video_seq,omitempty"` // version installée dont le flux vidéo reste à constater
 }
 
 func (u *Updater) now() time.Time {
@@ -134,7 +150,7 @@ func (u *Updater) Status() Status {
 	st := u.pub
 	u.smu.Unlock()
 	s := Status{Keys: len(u.Keys), RunningSeq: u.RunningSeq, Result: st.Result, Message: st.Message,
-		SeenSeq: st.SeenSeq, SeenVersion: st.SeenVersion, PendingSeq: st.PendingSeq, FailedSeq: st.FailedSeq}
+		SeenSeq: st.SeenSeq, SeenVersion: st.SeenVersion, PendingSeq: st.PendingSeq, FailedSeq: st.FailedSeq, VideoSeq: st.VideoSeq}
 	if !st.LastCheck.IsZero() {
 		s.LastCheck = st.LastCheck.UTC().Format(time.RFC3339)
 	}
@@ -148,7 +164,12 @@ func (u *Updater) Run(ctx context.Context) {
 	u.chk.Lock()
 	u.load()
 	u.reconcile()
+	u.publish()
+	video := u.VideoProbe != nil && u.st.VideoSeq != 0 && u.st.VideoSeq == u.RunningSeq
 	u.chk.Unlock()
+	if video {
+		go u.watchVideo(ctx, u.RunningSeq)
+	}
 	wait := u.First
 	if wait <= 0 {
 		wait = FirstDelay
@@ -203,6 +224,7 @@ func (u *Updater) note(code, msg string, checked bool) string {
 func (u *Updater) reconcile() {
 	trial := u.Trial != nil && u.Trial()
 	p := u.st.PendingSeq
+	defer u.reconcileVideo()
 	if p == 0 {
 		u.reconcileRunning(trial)
 		return
@@ -220,7 +242,7 @@ func (u *Updater) reconcile() {
 		if p > u.st.FailedSeq {
 			u.st.FailedSeq = p
 		}
-		u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = 0, "", time.Time{}
+		u.clearPending()
 		u.note(ResRolledBack, fmt.Sprintf("la version signée %d n'a pas passé l'essai : QIARA Plus est revenu en arrière, elle ne sera pas réessayée", p), false)
 	}
 }
@@ -240,6 +262,13 @@ func (u *Updater) reconcileRunning(trial bool) {
 			u.logger().Warn("mise à jour signée : état non enregistré", "error", err)
 		}
 		u.publish()
+	case u.RunningSeq < u.st.InstalledSeq && u.st.InstalledSeq <= u.st.FailedSeq:
+		// déjà notée en échec, et expliquée (flux vidéo absent : video.go) : on garde ce message
+		u.st.InstalledSeq = u.RunningSeq
+		if err := saveState(u.StatePath, u.st); err != nil {
+			u.logger().Warn("mise à jour signée : état non enregistré", "error", err)
+		}
+		u.publish()
 	case u.RunningSeq < u.st.InstalledSeq:
 		gone := u.st.InstalledSeq
 		if gone > u.st.FailedSeq {
@@ -248,6 +277,25 @@ func (u *Updater) reconcileRunning(trial bool) {
 		u.st.InstalledSeq = u.RunningSeq
 		u.note(ResRolledBack, fmt.Sprintf("la version signée %d a été quittée (version %d en service : version précédente, réinstallation à la main ou repli de QIARA Plus) : elle ne sera pas réinstallée, il faut publier un seq supérieur", gone, u.RunningSeq), false)
 	}
+}
+
+// reconcileVideo oublie le contrôle du flux d'une version qui ne tourne plus et n'est plus à l'essai
+// (retour arrière, autre version installée à la main). Sous chk.
+func (u *Updater) reconcileVideo() {
+	v := u.st.VideoSeq
+	if v == 0 || v == u.RunningSeq || v == u.st.PendingSeq {
+		return
+	}
+	u.st.VideoSeq = 0
+	if err := saveState(u.StatePath, u.st); err != nil {
+		u.logger().Warn("mise à jour signée : état non enregistré", "error", err)
+	}
+	u.publish()
+}
+
+// clearPending abandonne l'installation en cours (essai annulé ou revenu en arrière). Sous chk.
+func (u *Updater) clearPending() {
+	u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt, u.st.VideoSeq = 0, "", time.Time{}, 0
 }
 
 // CheckOnce fait une vérification complète et renvoie son code de résultat.
@@ -346,6 +394,11 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 		}
 	}
 
+	// Flux vidéo (cache ouvert) : il doit couler avec la version en service.
+	if err := u.videoBefore(ctx); err != nil {
+		return u.note(ResWaiting, "flux vidéo absent avec la version en service ("+err.Error()+") : installation reportée", true)
+	}
+
 	// Téléchargement borné, somme contrôlée au fil de l'eau.
 	u.cleanIncoming()
 	final := filepath.Join(u.IncomingDir, fmt.Sprintf("sig-%d.bin", m.Seq))
@@ -362,6 +415,9 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 	// Dernier contrôle de l'alarme juste avant le geste, puis dépôt chez QIARA Plus.
 	if !u.Disarmed() {
 		return u.note(ResWaiting, "alarme armée pendant le téléchargement : installation reportée", true)
+	}
+	if err := u.videoBefore(ctx); err != nil {
+		return u.note(ResWaiting, "flux vidéo absent avec la version en service ("+err.Error()+") : installation reportée", true)
 	}
 	// qp-update n'est jamais interrompu par l'arrêt du daemon (contexte détaché) : coupé au milieu, il
 	// laisserait l'essai à moitié posé ; seul le délai de 3 min l'arrête (outil bloqué).
@@ -380,19 +436,20 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 		u.undo(ctx)
 		return u.note(ResWaiting, "alarme armée au dernier moment : essai annulé, installation reportée", true)
 	}
-	u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = m.Seq, m.SHA256, u.now()
+	// VideoSeq : la nouvelle version contrôlera son propre flux vidéo (video.go).
+	u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt, u.st.VideoSeq = m.Seq, m.SHA256, u.now(), m.Seq
 	if err := saveState(u.StatePath, u.st); err != nil {
 		u.logger().Warn("mise à jour signée : état non enregistré", "error", err)
 	}
 	if err := u.Restart(); err != nil {
 		u.undo(ctx)
-		u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = 0, "", time.Time{}
+		u.clearPending()
 		return u.note(ResWaiting, "relance impossible ("+err.Error()+") : essai annulé, nouvel essai à la prochaine vérification", true)
 	}
 	code := u.note(ResInstalling, fmt.Sprintf("version %s (seq %d) déposée chez QIARA Plus, relance demandée", m.Version, m.Seq), true)
 	if why := u.awaitRestart(ctx); why != "" {
 		u.undo(ctx)
-		u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = 0, "", time.Time{}
+		u.clearPending()
 		return u.note(ResWaiting, why+" : essai annulé, nouvel essai à la prochaine vérification", true)
 	}
 	return code
