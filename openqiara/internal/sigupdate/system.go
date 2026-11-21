@@ -62,7 +62,9 @@ func NewSystem(c SystemConfig) *Updater {
 		Stage: func(ctx context.Context, file, sha string) error {
 			return runTool(ctx, p.UpdateTool(), "stage", file, sha)
 		},
-		Restart: func() error { return p.Order("restart-app") },
+		Restart:       func() error { return p.Order("restart-app") },
+		OrderWaiting:  func() bool { return p.OrderWaiting("restart-app") },
+		WithdrawOrder: func() bool { return p.WithdrawOrder("restart-app") },
 		Rollback: func(ctx context.Context) error {
 			return runTool(ctx, p.UpdateTool(), "rollback", "mise à jour signée annulée")
 		},

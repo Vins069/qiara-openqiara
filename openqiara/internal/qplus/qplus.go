@@ -336,6 +336,20 @@ func (p Paths) Order(name string) error {
 	return f.Close()
 }
 
+// OrderWaiting tells whether an order left by Order still waits for the guard
+// (the guard removes the file when it takes the order, before carrying it out).
+func (p Paths) OrderWaiting(name string) bool {
+	_, err := os.Lstat(filepath.Join(p.Run, "cmd", name))
+	return err == nil
+}
+
+// WithdrawOrder removes an order the guard has not taken yet. True: it was
+// still waiting and will not be carried out; false: nothing to withdraw (the
+// guard took it, or it was never left).
+func (p Paths) WithdrawOrder(name string) bool {
+	return os.Remove(filepath.Join(p.Run, "cmd", name)) == nil
+}
+
 // GuardBeating tells whether the guard has beaten within the last 2 minutes.
 func (p Paths) GuardBeating() bool {
 	beat, err := strconv.ParseInt(readLine(filepath.Join(p.Run, "guard_beat")), 10, 64)

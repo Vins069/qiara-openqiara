@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/caligone/openqiara/internal/qplus"
 )
@@ -174,4 +175,29 @@ func fakeBinaryNoELF(n int) []byte {
 		b[i] = byte(i % 251)
 	}
 	return b
+}
+
+// Revue V17, avec le vrai qp-update : l'alarme s'arme pendant que l'ordre de relance attend le
+// surveillant. L'ordre est retiré de /tmp/qp/cmd et l'essai annulé (emplacement good actif).
+func TestRealQPUpdateOrderWithdrawnWhenArmed(t *testing.T) {
+	b := newQPBench(t)
+	g := b.g
+	sys := NewSystem(SystemConfig{Paths: b.paths, Incoming: g.u.IncomingDir, Settings: g.u.Settings})
+	g.u.OrderWaiting, g.u.WithdrawOrder = sys.OrderWaiting, sys.WithdrawOrder
+	g.u.PollEvery = 5 * time.Millisecond
+	calls := 0
+	g.u.Disarmed = func() bool { calls++; return calls <= 3 }
+	g.rel.publish(5, armELF(1_200_000, 1), nil)
+	if got := g.check(t); got != ResWaiting {
+		t.Fatalf("résultat %q (%s)", got, g.u.Status().Message)
+	}
+	if _, err := os.Stat(b.run + "/cmd/restart-app"); err == nil {
+		t.Error("ordre de relance laissé au surveillant alors que l'alarme est armée")
+	}
+	if b.paths.Trial() {
+		t.Error("essai toujours posé")
+	}
+	if a := strings.TrimSpace(readFile(b.qp + "/state/active")); a != "good" {
+		t.Errorf("emplacement actif %q, good attendu", a)
+	}
 }

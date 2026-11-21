@@ -50,20 +50,29 @@ type Updater struct {
 	StatePath   string
 	IncomingDir string
 
-	Settings  func() Settings
-	Disarmed  func() bool  // alarme désarmée ET état connu
-	Ready     func() error // QIARA Plus présent et gardien vivant
-	Trial     func() bool  // un essai de QIARA Plus est en cours
-	Stage     func(ctx context.Context, file, sha string) error
-	Restart   func() error                    // ordre restart-app
-	Rollback  func(ctx context.Context) error // annule l'essai déposé (rien à annuler : sans erreur)
-	FreeSpace func(dir string) (uint64, error)
-	Now       func() time.Time
-	Log       *slog.Logger
+	Settings func() Settings
+	Disarmed func() bool  // alarme désarmée ET état connu
+	Ready    func() error // QIARA Plus présent et gardien vivant
+	Trial    func() bool  // un essai de QIARA Plus est en cours
+	Stage    func(ctx context.Context, file, sha string) error
+	Restart  func() error                    // ordre restart-app
+	Rollback func(ctx context.Context) error // annule l'essai déposé (rien à annuler : sans erreur)
+	// OrderWaiting : l'ordre de relance attend encore le surveillant ; WithdrawOrder le retire s'il
+	// attend encore (vrai : retiré, il ne sera pas exécuté). Nil : la relance n'est pas suivie.
+	OrderWaiting  func() bool
+	WithdrawOrder func() bool
+	FreeSpace     func(dir string) (uint64, error)
+	Now           func() time.Time
+	Log           *slog.Logger
 
 	First           time.Duration
 	ManifestTimeout time.Duration
 	DownloadTimeout time.Duration
+	// Suivi de la relance (défauts : 3 min pour que le surveillant prenne l'ordre, 2 min ensuite
+	// pour que ce processus soit arrêté, contrôle chaque seconde).
+	OrderTimeout time.Duration
+	RestartGrace time.Duration
+	PollEvery    time.Duration
 
 	chk    sync.Mutex // une vérification à la fois, tenue pendant tout le réseau
 	st     State      // état de travail, sous chk
@@ -360,7 +369,53 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 		u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = 0, "", time.Time{}
 		return u.note(ResWaiting, "relance impossible ("+err.Error()+") : essai annulé, nouvel essai à la prochaine vérification", true)
 	}
-	return u.note(ResInstalling, fmt.Sprintf("version %s (seq %d) déposée chez QIARA Plus, relance demandée", m.Version, m.Seq), true)
+	code := u.note(ResInstalling, fmt.Sprintf("version %s (seq %d) déposée chez QIARA Plus, relance demandée", m.Version, m.Seq), true)
+	if why := u.awaitRestart(ctx); why != "" {
+		u.undo(ctx)
+		u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = 0, "", time.Time{}
+		return u.note(ResWaiting, why+" : essai annulé, nouvel essai à la prochaine vérification", true)
+	}
+	return code
+}
+
+// awaitRestart suit l'ordre de relance jusqu'à l'arrêt de ce processus par le surveillant. Un essai
+// déposé et jamais relancé partirait au prochain démarrage venu (plantage, coupure de courant,
+// redémarrage), peut-être alarme armée : tant que l'ordre attend, il est retiré si l'alarme s'arme ou
+// si le surveillant ne le prend pas ; pris, il doit arrêter ce processus dans le délai. Renvoie la raison
+// d'annuler l'essai, ou "" (relance en cours, arrêt du daemon, ou relance non suivie). Sous chk.
+func (u *Updater) awaitRestart(ctx context.Context) string {
+	if u.OrderWaiting == nil || u.WithdrawOrder == nil {
+		return ""
+	}
+	poll := orDur(u.PollEvery, time.Second)
+	deadline := time.Now().Add(orDur(u.OrderTimeout, 3*time.Minute))
+	for u.OrderWaiting() {
+		why := ""
+		switch {
+		case u.Disarmed == nil || !u.Disarmed():
+			why = "alarme armée avant la relance"
+		case time.Now().After(deadline):
+			why = "QIARA Plus n'a pas pris l'ordre de relance"
+		}
+		if why != "" {
+			if u.WithdrawOrder() {
+				return why
+			}
+			break // pris à l'instant par le surveillant : la relance a lieu
+		}
+		select {
+		case <-ctx.Done(): // arrêt du daemon : l'essai partira au démarrage qui suit, sans seconde relance
+			u.WithdrawOrder()
+			return ""
+		case <-time.After(poll):
+		}
+	}
+	select {
+	case <-ctx.Done(): // arrêt du daemon : c'est la relance
+		return ""
+	case <-time.After(orDur(u.RestartGrace, 2*time.Minute)):
+		return "QIARA Plus n'a pas relancé l'application (limite de relances, mode passif ou surveillant ancien)"
+	}
 }
 
 func (u *Updater) undo(ctx context.Context) {

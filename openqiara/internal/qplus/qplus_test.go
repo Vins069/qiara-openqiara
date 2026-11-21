@@ -322,3 +322,33 @@ func TestTrialUpdateToolAndBeat(t *testing.T) {
 		t.Errorf("chemins : %s %s", p.UpdateTool(), p.UpdateStatePath())
 	}
 }
+
+// Revue V17 : un ordre laissé au surveillant se voit tant qu'il attend et peut être retiré avant
+// d'être pris ; une fois pris (fichier retiré par le surveillant), rien à retirer.
+func TestOrderWaitingAndWithdraw(t *testing.T) {
+	dir := t.TempDir()
+	p := Paths{Run: dir + "/run", State: dir + "/qp/state", Guard: dir + "/qp/qp-guard", Proc: dir + "/proc"}
+	os.MkdirAll(p.Run, 0o755)
+	os.MkdirAll(filepath.Dir(p.Guard), 0o755)
+	os.MkdirAll(p.Proc, 0o755)
+	os.WriteFile(p.Guard, []byte("#!/bin/sh\n"), 0o755)
+	os.WriteFile(p.Proc+"/uptime", []byte("500.00 400.00\n"), 0o644)
+	os.WriteFile(p.Run+"/guard_beat", []byte("495\n"), 0o644)
+	if p.OrderWaiting("restart-app") || p.WithdrawOrder("restart-app") {
+		t.Fatal("ordre vu ou retiré sans avoir été laissé")
+	}
+	if err := p.Order("restart-app"); err != nil {
+		t.Fatal(err)
+	}
+	if !p.OrderWaiting("restart-app") {
+		t.Fatal("ordre laissé non vu")
+	}
+	if !p.WithdrawOrder("restart-app") || p.OrderWaiting("restart-app") {
+		t.Fatal("ordre non retiré")
+	}
+	p.Order("restart-app")
+	os.Remove(filepath.Join(p.Run, "cmd", "restart-app")) // le surveillant le prend
+	if p.WithdrawOrder("restart-app") {
+		t.Error("ordre déjà pris annoncé comme retiré")
+	}
+}
