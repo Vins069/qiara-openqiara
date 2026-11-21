@@ -358,7 +358,9 @@ func (u *Updater) CheckOnce(ctx context.Context) string {
 	if !u.Disarmed() {
 		return u.note(ResWaiting, "alarme armée pendant le téléchargement : installation reportée", true)
 	}
-	sctx, scancel := context.WithTimeout(ctx, 3*time.Minute)
+	// qp-update n'est jamais interrompu par l'arrêt du daemon (contexte détaché) : coupé au milieu, il
+	// laisserait l'essai à moitié posé ; seul le délai de 3 min l'arrête (outil bloqué).
+	sctx, scancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Minute)
 	err = u.Stage(sctx, final, m.SHA256)
 	scancel()
 	if err != nil {
@@ -430,7 +432,7 @@ func (u *Updater) undo(ctx context.Context) {
 	if u.Rollback == nil {
 		return
 	}
-	rctx, c := context.WithTimeout(ctx, time.Minute)
+	rctx, c := context.WithTimeout(context.WithoutCancel(ctx), time.Minute) // comme le dépôt : jamais interrompu
 	defer c()
 	if err := u.Rollback(rctx); err != nil {
 		u.logger().Error("mise à jour signée : annulation de l'essai impossible", "error", err)
