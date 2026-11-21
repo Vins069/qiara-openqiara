@@ -2,13 +2,14 @@ package sigupdate
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
 )
 
 // State est la mémoire persistante de la mise à jour signée (/data/qp/sigupdate.json) :
-// quelques écritures par version, jamais en boucle.
+// une écriture par vérification (toutes les 6 h au plus) et quelques-unes par version installée.
 type State struct {
 	LastCheck   time.Time `json:"last_check,omitempty"`
 	Result      string    `json:"result,omitempty"`  // code court, voir les constantes Res*
@@ -53,15 +54,34 @@ func loadState(path string) State {
 	return s
 }
 
-// saveState écrit atomiquement (fichier temporaire puis renommage).
+// saveState écrit atomiquement : fichier temporaire synchronisé sur la carte, puis renommage, puis
+// synchronisation du dossier (comme config.Store et l'état de l'alarme de l'amont rc.25). Une coupure
+// de courant laisse l'ancien fichier ou le nouveau, jamais un fichier vide : perdre cet état ferait
+// oublier le plus grand seq vu (anti-retour-arrière) et les versions revenues en arrière.
 func saveState(path string, s State) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	b, _ := json.MarshalIndent(s, "", " ")
 	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	if err == nil {
+		_, err = f.Write(append(b, '\n'))
+		if err == nil {
+			err = f.Sync()
+		}
+		err = errors.Join(err, f.Close())
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, path)
+	if d, derr := os.Open(filepath.Dir(path)); derr == nil {
+		_ = d.Sync()
+		d.Close()
+	}
+	return nil
 }
