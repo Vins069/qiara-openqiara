@@ -165,10 +165,14 @@ func (u *Updater) Run(ctx context.Context) {
 	u.load()
 	u.reconcile()
 	u.publish()
-	video := u.VideoProbe != nil && u.st.VideoSeq != 0 && u.st.VideoSeq == u.RunningSeq
+	seq := u.RunningSeq
+	video := u.VideoProbe != nil && u.st.VideoSeq != 0 && u.st.VideoSeq == seq
 	u.chk.Unlock()
-	if video {
-		go u.watchVideo(ctx, u.RunningSeq)
+	if video { // Run ne rend la main qu'après le contrôle du flux (un retour en cours n'est pas abandonné)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() { defer wg.Done(); u.watchVideo(ctx, seq) }()
+		defer wg.Wait()
 	}
 	wait := u.First
 	if wait <= 0 {

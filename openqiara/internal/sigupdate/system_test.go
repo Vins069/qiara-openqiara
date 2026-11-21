@@ -82,6 +82,7 @@ func newQPBench(t *testing.T) *qpBench {
 	g := newRig(t)
 	sys := NewSystem(SystemConfig{Paths: b.paths, Incoming: g.u.IncomingDir, Settings: g.u.Settings, Disarmed: g.u.Disarmed})
 	g.u.Ready, g.u.Trial, g.u.Stage, g.u.Restart, g.u.Rollback, g.u.StatePath = sys.Ready, sys.Trial, sys.Stage, sys.Restart, sys.Rollback, sys.StatePath
+	g.u.UsePrev = sys.UsePrev
 	b.g = g
 	return b
 }
