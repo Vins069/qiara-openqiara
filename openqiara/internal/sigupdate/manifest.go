@@ -21,9 +21,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Bornes du binaire : celles de qp-update (QP_MIN_SIZE, QP_MAX_SIZE).
@@ -113,22 +115,67 @@ func Verify(keys []ed25519.PublicKey, manifest, sigFile []byte) (*Manifest, erro
 	return ParseManifest(manifest)
 }
 
+// manifestKeys : les seules clés d'update.json, à la casse près.
+var manifestKeys = map[string]bool{"channel": true, "seq": true, "version": true, "issued_at": true,
+	"asset": true, "sha256": true, "size": true, "min_seq": true}
+
 // ParseManifest analyse et valide un manifeste (la signature est déjà contrôlée
 // par Verify ; oqsign l'utilise aussi avant de signer).
+//
+// L'analyse est stricte pour qu'un même fichier signé ne puisse pas se lire de deux façons (par la
+// caméra, par un autre outil, par un humain) : UTF-8 valide, un seul objet, rien après, clés connues
+// à la casse exacte (encoding/json accepte « SEQ » pour « seq »), chacune une seule fois (sinon la
+// dernière gagnerait).
 func ParseManifest(b []byte) (*Manifest, error) {
+	if err := strictKeys(b); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrBadManifest, err)
+	}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	var m Manifest
 	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrBadManifest, err)
 	}
-	if dec.More() {
-		return nil, fmt.Errorf("%w: données après le manifeste", ErrBadManifest)
-	}
 	if err := m.Validate(); err != nil {
 		return nil, err
 	}
 	return &m, nil
+}
+
+func strictKeys(b []byte) error {
+	if !utf8.Valid(b) {
+		return errors.New("UTF-8 invalide")
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
+		return errors.New("objet JSON attendu")
+	}
+	seen := map[string]bool{}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		k, _ := tok.(string)
+		switch {
+		case !manifestKeys[k]:
+			return fmt.Errorf("clé %q inconnue", k)
+		case seen[k]:
+			return fmt.Errorf("clé %q répétée", k)
+		}
+		seen[k] = true
+		var v json.RawMessage
+		if err := dec.Decode(&v); err != nil {
+			return err
+		}
+	}
+	if _, err := dec.Token(); err != nil { // l'accolade fermante
+		return err
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return errors.New("données après le manifeste")
+	}
+	return nil
 }
 
 // Validate vérifie les champs, qui servent à fabriquer des chemins et des
