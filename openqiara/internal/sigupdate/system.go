@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -52,6 +53,10 @@ func NewSystem(c SystemConfig) *Updater {
 		Ready: func() error {
 			if !p.Installed() {
 				return errors.New("non installé")
+			}
+			// qp-update absent ou illisible : le téléchargement serait refusé au dépôt, toutes les 12 h.
+			if st, err := os.Stat(p.UpdateTool()); err != nil || !st.Mode().IsRegular() || st.Size() == 0 {
+				return errors.New("qp-update absent")
 			}
 			if !p.GuardBeating() {
 				return qplus.ErrGuardAbsent

@@ -201,3 +201,18 @@ func TestRealQPUpdateOrderWithdrawnWhenArmed(t *testing.T) {
 		t.Errorf("emplacement actif %q, good attendu", a)
 	}
 }
+
+// Revue V17 : QIARA Plus sans qp-update (installation incomplète, version ancienne) : rien n'est
+// téléchargé (sur claude17 : 12 Mo téléchargés à chaque vérification, puis dépôt refusé).
+func TestRealQPUpdateToolMissing(t *testing.T) {
+	b := newQPBench(t)
+	g := b.g
+	os.Remove(b.qp + "/qp-update")
+	g.rel.publish(5, armELF(1_200_000, 1), nil)
+	if got := g.check(t); got != ResWaiting || !strings.Contains(g.u.Status().Message, "qp-update absent") {
+		t.Fatalf("résultat %q (%s)", got, g.u.Status().Message)
+	}
+	if g.rel.count("/openqiarad-test") != 0 {
+		t.Error("binaire téléchargé alors que qp-update manque")
+	}
+}
