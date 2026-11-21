@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -173,4 +174,17 @@ func TestProductionKeyPresent(t *testing.T) {
 			"Créer la paire avec « oqsign keygen », graver la clé PUBLIQUE, jamais la privée.")
 	}
 	t.Log("aucune clé de production gravée : mise à jour signée désactivée (SIGUPDATE_REQUIRE_PROD_KEY=1 pour exiger la clé)")
+}
+
+// La clé gravée est bien celle de Vincent (empreinte relevée à sa création, 21/11/2026) : une
+// modification accidentelle de keys.go, ou une clé ajoutée par erreur, se voit ici.
+func TestProductionKeyIsVincents(t *testing.T) {
+	keys := Keys()
+	if len(keys) != 1 || len(ProductionKeys) != 1 {
+		t.Fatalf("%d clé(s) gravée(s), %d lue(s) : une seule attendue (Vincent)", len(ProductionKeys), len(keys))
+	}
+	h := sha256.Sum256(keys[0])
+	if got := hex.EncodeToString(h[:8]); got != "5393667379ec8291" {
+		t.Fatalf("empreinte de la clé gravée %s, attendue 5393667379ec8291", got)
+	}
 }
