@@ -15,7 +15,9 @@
 # a été renommé, remplacer le début « openqiara_camera_ ». Les alertes sont des notifications de Home Assistant (cloche) ;
 # pour les recevoir ailleurs (Telegram, téléphone), ajouter sous chaque « actions » un appel à votre service notify.
 # Les états sont ceux publiés par la caméra : « Installation en essai », « Installée », « Retour arrière »,
-# « Signature refusée », « Version refusée », « Erreur ».
+# « Signature refusée », « Version refusée », « Erreur ». Le dernier résultat est gardé par la caméra : sans
+# « not_from », chaque retour de l'entité (redémarrage de la caméra ou de Home Assistant, reconnexion MQTT)
+# renverrait la même alerte.
 
 automation:
   - id: openqiara_maj_signee_installation
@@ -25,6 +27,7 @@ automation:
     triggers:
       - trigger: state
         entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        not_from: ["unavailable", "unknown"]   # pas au retour de l'entité (redémarrage, MQTT, Home Assistant)
         to: "Installation en essai"
     actions:
       - action: persistent_notification.create
@@ -41,6 +44,7 @@ automation:
     triggers:
       - trigger: state
         entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        not_from: ["unavailable", "unknown"]   # pas au retour de l'entité (redémarrage, MQTT, Home Assistant)
         to: "Installée"
     actions:
       - action: persistent_notification.create
@@ -53,11 +57,12 @@ automation:
 
   - id: openqiara_maj_signee_retour_arriere
     alias: "Caméra Qiara : mise à jour signée annulée (retour arrière)"
-    description: "La nouvelle version n'a pas passé l'essai : QIARA Plus est revenu à la précédente. Elle ne sera pas réessayée."
+    description: "La version signée n'a pas passé l'essai, ou on est revenu à une version antérieure (bouton de QIARA Plus, réinstallation à la main) : elle ne sera pas réinstallée."
     mode: single
     triggers:
       - trigger: state
         entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        not_from: ["unavailable", "unknown"]   # pas au retour de l'entité (redémarrage, MQTT, Home Assistant)
         to: "Retour arrière"
     actions:
       - action: persistent_notification.create
@@ -65,8 +70,9 @@ automation:
           notification_id: openqiara_maj_signee_echec
           title: "Caméra Qiara : mise à jour annulée"
           message: >-
-            La version signée n'a pas passé l'essai : la caméra est revenue à la version précédente
-            ({{ now().strftime('%d/%m %H:%M') }}). Elle ne sera pas réessayée ; une nouvelle version signée est nécessaire.
+            La caméra est revenue à une version antérieure ({{ now().strftime('%d/%m %H:%M') }}) : essai non passé,
+            bouton « version précédente » ou réinstallation à la main. La version quittée ne sera pas réinstallée ;
+            une nouvelle version signée (seq supérieur) est nécessaire. Détail : GET /api/v1/update/signed.
 
   - id: openqiara_maj_signee_refus
     alias: "Caméra Qiara : mise à jour signée refusée"
@@ -75,6 +81,7 @@ automation:
     triggers:
       - trigger: state
         entity_id: sensor.openqiara_camera_mise_a_jour_signee
+        not_from: ["unavailable", "unknown"]   # pas au retour de l'entité (redémarrage, MQTT, Home Assistant)
         to:
           - "Signature refusée"
           - "Version refusée"
