@@ -2,7 +2,7 @@
 # construire-paquet.sh : fabrique le paquet pret a l'emploi « OpenQIARA-Claude-V16 » (dossier + archive zip).
 #   sh construire-paquet.sh [date AAAA-MM-JJ]       sortie : build/paquet/OpenQIARA-Claude-V16/ (dossier de travail), puis
 #                                                   paquet/OpenQIARA-Claude-V16.zip et son empreinte (versionnes)
-# Etapes : compilation reproductible du binaire ARM (Go 1.26.1, zig 0.17.0), version compacte (UPX 4), outils QIARA Plus
+# Etapes : compilation reproductible du binaire ARM (Go 1.26.11, zig 0.17.0), version compacte (UPX 4), outils QIARA Plus
 # (qiara-plus/build.sh), assemblage, empreintes. Prerequis : go, python3 -m ziglang, upx, zip.
 set -e
 ICI=$(cd "$(dirname "$0")" && pwd)

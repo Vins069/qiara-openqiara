@@ -2,6 +2,8 @@ module github.com/caligone/openqiara
 
 go 1.26.1
 
+toolchain go1.26.11
+
 require (
 	github.com/bluenviron/gohlslib/v2 v2.4.6
 	github.com/bluenviron/gortsplib/v5 v5.6.1

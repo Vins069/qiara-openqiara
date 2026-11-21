@@ -168,9 +168,10 @@ notifie l'essai, l'installation, le retour arrière et les refus.
 - Un seul propriétaire de clé : celui qui la détient peut signer.
 - Il faut un accès HTTPS à `github.com` depuis la caméra (c'est déjà celui de l'OTA de l'amont), et une horloge
   réglée (NTP) : avant, les certificats sont refusés et la vérification échoue (`echec-reseau`).
-- Construire la version de livraison avec la **dernière version corrective de Go 1.26** (1.26.11 au 21/11/2026) :
-  la 1.26.1 a des failles connues dans `crypto/x509`, `crypto/tls` et `net/http` atteignables par ce client HTTPS
-  (rapport `govulncheck`).
+- La livraison est construite avec **Go 1.26.11** (ligne `toolchain` du `go.mod`, contrôlée par
+  `scripts/build-arm.sh` avec zig 0.17.0) : la 1.26.1 a des failles connues dans `crypto/x509`, `crypto/tls` et
+  `net/http` atteignables par ce client HTTPS (rapport `govulncheck`). Passer aux versions correctives suivantes de
+  Go 1.26 quand elles paraissent.
 - Aucune installation de la V17 sur une vraie caméra n'a été faite par ce chantier : voir la note d'état.
 
 ## Dépannage
