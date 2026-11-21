@@ -158,3 +158,26 @@ func TestUpstreamAutoStillRefusedWithSignedAPI(t *testing.T) {
 		t.Errorf("GET /config expose la mise à jour signée : %s", rec.Body.String())
 	}
 }
+
+// Revue V17 : main attache la mise à jour signée après le démarrage du serveur web ; une requête
+// arrivée à ce moment-là ne doit pas lire le champ pendant son écriture (course signalée par -race
+// sur claude17).
+func TestSignedUpdateAttachWhileServing(t *testing.T) {
+	s, _, h := signedServer(t, false, false, false)
+	u := &sigupdate.Updater{StatePath: filepath.Join(t.TempDir(), "s.json")}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			if rec := call(h, http.MethodGet, ""); rec.Code != http.StatusServiceUnavailable && rec.Code != http.StatusOK {
+				t.Errorf("code %d", rec.Code)
+				return
+			}
+		}
+	}()
+	s.SetSignedUpdate(u)
+	<-done
+	if rec := call(h, http.MethodGet, ""); rec.Code != http.StatusOK {
+		t.Errorf("après rattachement : code %d", rec.Code)
+	}
+}

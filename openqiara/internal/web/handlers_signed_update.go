@@ -24,7 +24,7 @@ type signedUpdateView struct {
 	Status    sigupdate.Status `json:"status"`
 }
 
-func (s *Server) signedView() signedUpdateView {
+func (s *Server) signedView(su *sigupdate.Updater) signedUpdateView {
 	c := s.store.Get().SignedUpdate
 	v := signedUpdateView{Enabled: c.Enabled, Repo: c.Repo, Channel: c.Channel, IntervalHours: c.IntervalHours}
 	if v.Channel == "" {
@@ -33,18 +33,19 @@ func (s *Server) signedView() signedUpdateView {
 	if v.IntervalHours == 0 {
 		v.IntervalHours = int(sigupdate.DefaultInterval / time.Hour)
 	}
-	v.Status = s.signed.Status()
+	v.Status = su.Status()
 	v.Available = v.Status.Keys > 0 && qplusInstalled()
 	return v
 }
 
 // handleGetSignedUpdate : réglages et état de la mise à jour signée. 503 si non branchée.
 func (s *Server) handleGetSignedUpdate(w http.ResponseWriter, _ *http.Request) {
-	if s.signed == nil {
+	su := s.signed.Load()
+	if su == nil {
 		writeErr(w, http.StatusServiceUnavailable, "mise à jour signée non configurée")
 		return
 	}
-	writeJSON(w, http.StatusOK, s.signedView())
+	writeJSON(w, http.StatusOK, s.signedView(su))
 }
 
 // handlePutSignedUpdate modifie les réglages (champs absents : inchangés). Pris en compte à la
@@ -52,7 +53,8 @@ func (s *Server) handleGetSignedUpdate(w http.ResponseWriter, _ *http.Request) {
 // Cette route ne déclenche aucune installation : seule la vérification périodique, alarme
 // désarmée, installe. L'installation automatique de l'amont (PUT /config/update) reste refusée.
 func (s *Server) handlePutSignedUpdate(w http.ResponseWriter, r *http.Request) {
-	if s.signed == nil {
+	su := s.signed.Load()
+	if su == nil {
 		writeErr(w, http.StatusServiceUnavailable, "mise à jour signée non configurée")
 		return
 	}
@@ -99,7 +101,7 @@ func (s *Server) handlePutSignedUpdate(w http.ResponseWriter, r *http.Request) {
 		next.IntervalHours = h
 	}
 	if next.Enabled {
-		st := s.signed.Status()
+		st := su.Status()
 		switch {
 		case st.Keys == 0:
 			writeErr(w, http.StatusConflict, "Mise à jour signée indisponible : aucune clé de publication n'est gravée dans ce binaire.")
@@ -116,5 +118,5 @@ func (s *Server) handlePutSignedUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "échec sauvegarde: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, s.signedView())
+	writeJSON(w, http.StatusOK, s.signedView(su))
 }

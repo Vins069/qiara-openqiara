@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/caligone/openqiara/internal/camera"
@@ -107,7 +108,9 @@ type Server struct {
 	// 503 (pas configuré en build local sans -ldflags).
 	otaClient    *ota.Client
 	otaInstaller *ota.Installer
-	signed       *sigupdate.Updater
+	// signed : attachée après le démarrage du serveur (main crée la mise à jour signée plus tard) ; lue
+	// par les requêtes en cours, d'où le pointeur atomique.
+	signed atomic.Pointer[sigupdate.Updater]
 }
 
 // listSensors returns the paired sensors with their live state.
@@ -168,7 +171,7 @@ func (s *Server) SetVersion(v string) {
 }
 
 // SetSignedUpdate attache la mise à jour signée (API /api/v1/update/signed).
-func (s *Server) SetSignedUpdate(u *sigupdate.Updater) { s.signed = u }
+func (s *Server) SetSignedUpdate(u *sigupdate.Updater) { s.signed.Store(u) }
 
 // SetOTA attache le client GitHub Releases et l'installer. Si non
 // appelé, les endpoints /api/update/* renvoient 503.
