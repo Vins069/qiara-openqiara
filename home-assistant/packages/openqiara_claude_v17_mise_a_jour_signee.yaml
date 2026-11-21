@@ -1,7 +1,7 @@
 # OpenQIARA Claude V17 : alertes de la mise à jour signée (Home Assistant). FICHIER GÉNÉRIQUE, NON DÉPLOYÉ.
 #
-# Utile seulement une fois la mise à jour signée activée sur la caméra (voir docs/mise-a-jour-signee.md) : l'entité
-# « Mise à jour signée » n'existe dans Home Assistant que lorsque le binaire porte une clé de publication.
+# Utile dès que le binaire de la caméra porte une clé de publication (la mise à jour signée est alors active par
+# défaut, voir docs/mise-a-jour-signee.md) : l'entité « Mise à jour signée » n'existe pas avant.
 #
 # Installation (même principe que le paquet V16) :
 #   1. dans configuration.yaml, une seule fois :   homeassistant:
@@ -57,7 +57,7 @@ automation:
 
   - id: openqiara_maj_signee_retour_arriere
     alias: "Caméra Qiara : mise à jour signée annulée (retour arrière)"
-    description: "La version signée n'a pas passé l'essai, ou on est revenu à une version antérieure (bouton de QIARA Plus, réinstallation à la main) : elle ne sera pas réinstallée."
+    description: "La version signée n'a pas passé l'essai, n'a pas rendu le flux vidéo, ou on est revenu à une version antérieure (bouton de QIARA Plus, réinstallation à la main) : elle ne sera pas réinstallée."
     mode: single
     triggers:
       - trigger: state
@@ -71,8 +71,9 @@ automation:
           title: "Caméra Qiara : mise à jour annulée"
           message: >-
             La caméra est revenue à une version antérieure ({{ now().strftime('%d/%m %H:%M') }}) : essai non passé,
-            bouton « version précédente » ou réinstallation à la main. La version quittée ne sera pas réinstallée ;
-            une nouvelle version signée (seq supérieur) est nécessaire. Détail : GET /api/v1/update/signed.
+            flux vidéo absent avec la nouvelle version, bouton « version précédente » ou réinstallation à la main.
+            La version quittée ne sera pas réinstallée ; une nouvelle version signée (seq supérieur) est nécessaire.
+            Détail : GET /api/v1/update/signed, champ « status.message ».
 
   - id: openqiara_maj_signee_refus
     alias: "Caméra Qiara : mise à jour signée refusée"

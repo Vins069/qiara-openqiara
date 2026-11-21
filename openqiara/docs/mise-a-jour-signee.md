@@ -6,13 +6,15 @@ retour arrière automatique). C'est l'alternative de la distribution à l'instal
 (`PUT /api/v1/config/update {"auto":true}`), qui reste refusée (`409`) : une release de l'amont écraserait les
 ajouts de la distribution et le lanceur de QIARA Plus.
 
-**État de livraison : désactivée, et inerte tant qu'aucune clé de publication n'est gravée dans le binaire**
-(`internal/sigupdate/keys.go`, liste vide dans les sources). Rien n'est lu sur Internet, rien n'est installé.
+**Réglages de livraison (choix du propriétaire, 21/11/2026) : activée, dépôt `Vins069/qiara-openqiara`, une
+vérification toutes les 12 h. Elle reste inerte tant qu'aucune clé de publication n'est gravée dans le binaire**
+(`internal/sigupdate/keys.go`, liste vide dans les sources) : rien n'est lu sur Internet, rien n'est installé.
 
 ## Ce qui se passe
 
 1. Toutes les 12 h par défaut (6 h au minimum, 7 jours au maximum), la première vérification 15 minutes après le
-   démarrage, `openqiarad` lit dans la **dernière release** du dépôt réglé (`signed_update.repo`) deux petits fichiers :
+   démarrage, `openqiarad` lit dans la **dernière release** du dépôt réglé (`signed_update.repo`, par défaut
+   `Vins069/qiara-openqiara`) deux petits fichiers :
    `update.json` et `update.json.sig` (pour un autre canal que `stable` : `update-<canal>.json`). Adresse :
    `https://github.com/<dépôt>/releases/latest/download/<fichier>`. Pas l'API GitHub (pas de limite de requêtes).
 2. Il contrôle la signature Ed25519 avec les clés gravées dans le binaire, puis le manifeste. Signature fausse :
@@ -22,11 +24,14 @@ ajouts de la distribution et le lanceur de QIARA Plus.
 4. Garde-fous : alarme **désarmée et état connu** (jamais alarme armée, jamais état inconnu), aucun essai de
    QIARA Plus en cours, QIARA Plus présent (`qp-guard` et `qp-update`) et son surveillant vivant, place
    suffisante sur la carte (deux fois la taille du binaire plus 16 Mio : le fichier téléchargé et la copie que
-   `qp-update` fait dans `new`).
+   `qp-update` fait dans `new`), et **flux vidéo qui coule** avec la version en service si le cache est ouvert
+   (25 unités d'image du codec réglé, dont une image clé, en 20 s) : on ne relance pas pendant un incident vidéo, et
+   la nouvelle version ne doit pas être jugée sur un flux déjà absent. Cache fermé, le flux est en pause par
+   conception : rien à couper ni à contrôler.
 5. Il télécharge le binaire désigné dans `/media/qp/incoming` (carte SD, jamais `/data`), au plus la taille signée,
    HTTPS avec les autorités de certification embarquées, au plus 5 redirections, en HTTPS, limitées à
    `github.com`, `*.github.com` et `*.githubusercontent.com`, délai de 10 minutes. Taille et SHA-256 doivent être ceux du manifeste signé.
-6. Il redemande l'état de l'alarme, puis lance `qp-update stage <fichier> <sha256>` : QIARA Plus contrôle que c'est un
+6. Il redemande l'état de l'alarme et contrôle de nouveau le flux vidéo, puis lance `qp-update stage <fichier> <sha256>` : QIARA Plus contrôle que c'est un
    ELF ARM 32 bits de taille plausible, le place dans `new` et pose l'essai. `qp-update` n'est jamais interrompu par
    un arrêt d'`openqiarad` (seul son délai de 3 minutes l'arrête) ; un dépôt en échec qui aurait posé l'essai l'annule.
 7. Il redemande l'alarme une dernière fois, puis laisse l'ordre `restart-app` au surveillant de QIARA Plus.
@@ -43,6 +48,14 @@ ajouts de la distribution et le lanceur de QIARA Plus.
    **quittée** après avoir été en service (bouton « Revenir à la version précédente » de QIARA Plus, réinstallation à
    la main d'une version plus ancienne, repli de QIARA Plus) est reconnue au démarrage de la version qui tourne
    (résultat `retour-arriere`) et n'est plus réinstallée automatiquement.
+
+9. **Contrôle du flux par la version installée.** Dès son démarrage (ou à l'ouverture suivante du cache s'il est
+   fermé), la nouvelle version écoute son propre flux vidéo. Pendant l'essai, sa santé reste « non valide »
+   (`app_err` : flux pas encore constaté) : QIARA Plus ne la valide pas avant. Sans flux pendant 5 minutes, cache
+   ouvert, elle demande le retour : pendant l'essai `qp-update rollback`, après validation `qp-update use-prev`
+   (cas d'un cache resté fermé pendant tout l'essai). Jamais alarme armée ni état inconnu : le retour attend le
+   désarmement (résultat `attente`, message explicite). La version est notée en échec (`retour-arriere`, message
+   « n'a pas rendu le flux vidéo ») et n'est plus proposée.
 
 `openqiarad` ne remplace jamais `/data/openqiarad`, ne redémarre jamais la caméra et ne touche à aucun autre
 emplacement de QIARA Plus.
@@ -129,20 +142,24 @@ plus ancien que le plus récent déjà vu est refusé (anti-retour-arrière).
 ## Première installation et activation
 
 La V16 ne sait pas se mettre à jour : **la V17 elle-même s'installe une fois à la main** (outil de mise à niveau
-de la distribution, caméra désarmée), comme les versions précédentes. Ensuite seulement :
+de la distribution, caméra désarmée), comme les versions précédentes. Ensuite, avec une clé gravée et QIARA Plus,
+elle est active sans autre réglage (dépôt `Vins069/qiara-openqiara`, toutes les 12 h). Pour changer un réglage :
 
 ```sh
-# réglages (authentification administrateur de l'interface) ; 409 tant qu'aucune clé n'est gravée ou que QIARA Plus manque
+# authentification administrateur de l'interface ; « enabled »: true répond 409 tant qu'aucune clé n'est gravée ou
+# que QIARA Plus manque ; « repo »: "" revient au dépôt de la distribution
 curl -u admin -X PUT http://<caméra>/api/v1/update/signed -H 'Content-Type: application/json' \
-     -d '{"enabled":true,"repo":"<propriétaire>/<dépôt>","interval_hours":12}'
+     -d '{"repo":"<propriétaire>/<dépôt>","interval_hours":24}'
 curl -u admin http://<caméra>/api/v1/update/signed        # état : dernier résultat, version vue, version en service
 ```
 
-Couper : `{"enabled":false}` (toujours possible). Pris en compte à la vérification suivante, sans redémarrage.
+Couper : `{"enabled":false}` (toujours possible, gardé dans la configuration). Pris en compte à la vérification
+suivante, sans redémarrage.
 
 ## Retour arrière
 
-- **Automatique** : si la version signée ne passe pas l'essai, QIARA Plus revient à `good`. Elle n'est pas réessayée.
+- **Automatique** : si la version signée ne passe pas l'essai, QIARA Plus revient à `good` ; si elle ne rend pas le
+  flux vidéo, elle demande elle-même le retour (étape 9). Elle n'est pas réessayée.
 - **Par Home Assistant** : les boutons de QIARA Plus (`update-rollback` pendant l'essai, `use-prev` après).
 - **Couper la mise à jour signée** : `{"enabled":false}`.
 - **Retirer la fonction** : réinstaller à la main une version antérieure ; l'option `signed_update` du fichier de
@@ -153,7 +170,7 @@ Couper : `{"enabled":false}` (toujours possible). Pris en compte à la vérifica
 Quatre entités de diagnostic, **seulement une fois une clé gravée** : « Mise à jour signée » (dernier résultat : Désactivée,
 À jour, En attente, Installation en essai, Installée, Retour arrière, Signature refusée, Version refusée, Dépôt injoignable,
 Erreur), « Version signée en service » (`seq`), « Dernière version signée vue », « Dernière vérification ». Le détail
-(`status.message`, `pending_seq`, `failed_seq`) est dans `GET /api/v1/update/signed`. La mémoire est dans
+(`status.message`, `pending_seq`, `failed_seq`, `video_seq`) est dans `GET /api/v1/update/signed`. La mémoire est dans
 `/data/qp/sigupdate.json` (une écriture par vérification, écrite puis synchronisée sur la carte). L'effacer fait
 oublier le plus grand `seq` vu, les versions revenues en arrière ou quittées : à ne faire que pour réautoriser
 sciemment une version écartée. Le paquet `home-assistant/packages/openqiara_claude_v17_mise_a_jour_signee.yaml`
@@ -163,8 +180,11 @@ notifie l'essai, l'installation, le retour arrière et les refus.
 
 - Pas d'expiration : un serveur qui sert l'ancien manifeste *le plus récent* (« gel ») empêche seulement les mises à jour ;
   il ne peut pas faire revenir en arrière (`seq` inférieur au plus récent vu refusé).
-- Pas de vérification d'un flux vidéo en cours avant la relance : seules l'alarme, l'essai en cours et l'état de
-  QIARA Plus sont contrôlés. La relance coupe le flux quelques secondes.
+- La relance coupe le flux quelques secondes, alarme désarmée seulement. Elle n'attend pas qu'aucun client ne lise
+  le flux : Frigate (ou un enregistreur) le lit en permanence, et l'attendre empêcherait toute mise à jour.
+- Le contrôle du flux après la relance est fait par la version installée : il protège les mises à jour vers des
+  versions qui le contiennent (V17 et suivantes). Cache fermé pendant tout l'essai, QIARA Plus valide la version
+  sans constat vidéo ; le constat a lieu à l'ouverture suivante du cache (retour par `use-prev` si le flux manque).
 - Un seul propriétaire de clé : celui qui la détient peut signer.
 - Il faut un accès HTTPS à `github.com` depuis la caméra (c'est déjà celui de l'OTA de l'amont), et une horloge
   réglée (NTP) : avant, les certificats sont refusés et la vérification échoue (`echec-reseau`).
@@ -179,12 +199,12 @@ notifie l'essai, l'installation, le retour arrière et les refus.
 | Résultat | Sens |
 |---|---|
 | `pas-de-cle` | aucune clé gravée : fonction inerte |
-| `desactivee` | `enabled` faux |
+| `desactivee` | coupée (`enabled` faux) |
 | `echec-reseau` | dépôt injoignable, fichier absent (release sans `update.json`), réponse trop grosse, somme ou taille du binaire différentes de celles signées |
 | `echec-signature` | signature absente, fausse, ou clé non gravée |
 | `refusee` | manifeste bien signé mais invalide (champ hors règles), canal différent, `seq` plus ancien que le plus récent vu, `min_seq` non atteint, version déjà revenue en arrière ou quittée |
-| `attente` | alarme armée ou état inconnu, essai de QIARA Plus en cours, QIARA Plus absent ou incomplet, place insuffisante ou illisible, relance non faite par QIARA Plus (essai annulé) |
+| `attente` | alarme armée ou état inconnu, essai de QIARA Plus en cours, QIARA Plus absent ou incomplet, place insuffisante ou illisible, flux vidéo absent avec la version en service (cache ouvert), relance non faite par QIARA Plus (essai annulé), retour demandé faute de flux mais alarme armée |
 | `installation` | version déposée chez QIARA Plus ; essai en cours |
-| `installee` / `retour-arriere` | issue de l'essai, constatée au démarrage suivant ou à la vérification suivante ; `retour-arriere` aussi quand on est revenu à une version antérieure (bouton, réinstallation) |
+| `installee` / `retour-arriere` | issue de l'essai, constatée au démarrage suivant ou à la vérification suivante ; `retour-arriere` aussi quand on est revenu à une version antérieure (bouton, réinstallation) ou quand la version installée n'a pas rendu le flux vidéo |
 
 Journal : lignes « mise à jour signée » du journal d'openqiarad ; côté QIARA Plus : `qp-update status`.
