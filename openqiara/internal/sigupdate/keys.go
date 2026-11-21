@@ -4,7 +4,7 @@ import "crypto/ed25519"
 
 // ProductionKeys : clés publiques Ed25519 (base64, 32 octets) dont une signature
 // autorise l'installation. VIDE dans les sources tant que Vincent n'a pas créé sa
-// paire de clés (oqsign keygen) : la mise à jour signée reste alors désactivée,
+// paire de clés (oqsign keygen) : la mise à jour signée reste alors inerte,
 // quels que soient les réglages. Pour une rotation, graver l'ancienne et la
 // nouvelle clé ensemble le temps d'une version, puis retirer l'ancienne.
 //
