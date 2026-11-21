@@ -20,18 +20,28 @@ ajouts de la distribution et le lanceur de QIARA Plus.
 3. Il décide **avant de télécharger** : version plus récente que celle qui tourne (`seq`), canal identique,
    `min_seq` satisfait, version pas déjà revenue en arrière, manifeste pas plus ancien que le plus récent déjà vu.
 4. Garde-fous : alarme **désarmée et état connu** (jamais alarme armée, jamais état inconnu), aucun essai de
-   QIARA Plus en cours, QIARA Plus présent et son surveillant vivant, place suffisante sur la carte.
+   QIARA Plus en cours, QIARA Plus présent (`qp-guard` et `qp-update`) et son surveillant vivant, place
+   suffisante sur la carte (deux fois la taille du binaire plus 16 Mio : le fichier téléchargé et la copie que
+   `qp-update` fait dans `new`).
 5. Il télécharge le binaire désigné dans `/media/qp/incoming` (carte SD, jamais `/data`), au plus la taille signée,
-   HTTPS avec les autorités de certification embarquées, redirections limitées à `github.com` et
-   `*.githubusercontent.com`, délai de 10 minutes. Taille et SHA-256 doivent être ceux du manifeste signé.
+   HTTPS avec les autorités de certification embarquées, au plus 5 redirections, en HTTPS, limitées à
+   `github.com`, `*.github.com` et `*.githubusercontent.com`, délai de 10 minutes. Taille et SHA-256 doivent être ceux du manifeste signé.
 6. Il redemande l'état de l'alarme, puis lance `qp-update stage <fichier> <sha256>` : QIARA Plus contrôle que c'est un
    ELF ARM 32 bits de taille plausible, le place dans `new` et pose l'essai.
 7. Il redemande l'alarme une dernière fois, puis laisse l'ordre `restart-app` au surveillant de QIARA Plus.
    Si l'alarme s'est armée entre-temps, ou si l'ordre ne peut pas être donné, l'essai déposé est **annulé**
-   (`qp-update rollback`) : la caméra reste sur sa version.
+   (`qp-update rollback`) : la caméra reste sur sa version. L'ordre est ensuite **suivi** : tant qu'il attend le
+   surveillant (qui passe toutes les 10 s), l'alarme est contrôlée chaque seconde ; armée, ou ordre non pris en
+   3 minutes, l'ordre est retiré et l'essai annulé. Pris, il doit arrêter `openqiarad` dans les 2 minutes ; sinon
+   (limite de 6 relances par heure du surveillant, mode passif, surveillant trop ancien) l'essai est annulé : un essai
+   déposé ne part jamais au prochain démarrage venu (plantage, coupure de courant), peut-être alarme armée. Seule
+   reste la fenêtre de quelques secondes entre la prise de l'ordre et l'arrêt de l'application.
 8. QIARA Plus relance l'application sur `new`, la met à l'essai (180 s) et la valide par la santé, ou revient à
    `good`. À la vérification suivante, `openqiarad` constate le résultat : version en service (`installée`) ou version
-   revenue en arrière (mémorisée, **jamais réessayée** ; il faut publier un `seq` plus grand).
+   revenue en arrière (mémorisée, **jamais réessayée** ; il faut publier un `seq` plus grand). De même, une version
+   **quittée** après avoir été en service (bouton « Revenir à la version précédente » de QIARA Plus, réinstallation à
+   la main d'une version plus ancienne, repli de QIARA Plus) est reconnue au démarrage de la version qui tourne
+   (résultat `retour-arriere`) et n'est plus réinstallée automatiquement.
 
 `openqiarad` ne remplace jamais `/data/openqiarad`, ne redémarre jamais la caméra et ne touche à aucun autre
 emplacement de QIARA Plus.
@@ -59,11 +69,15 @@ emplacement de QIARA Plus.
 
 - `seq` : entier strictement croissant, **jamais réutilisé**, égal au `seq` compilé dans le binaire (voir plus bas).
   Une caméra n'installe que `seq` supérieur à celui qui tourne et à celui d'une version déjà revenue en arrière.
+  La numérotation est **commune à tous les canaux** (la caméra retient le plus grand `seq` vu, quel que soit le
+  canal) et **sans retour** : un `seq` publié par erreur trop grand (1000 au lieu de 18) fait refuser tous les
+  suivants jusqu'à 1001.
 - `min_seq` : plus petit `seq` installé pour qu'une mise à jour directe soit permise (0 : aucune exigence). Sert à
   imposer un passage par une version intermédiaire.
 - `size` entre 1 000 000 et 24 000 000 octets (les bornes de `qp-update`).
 - La signature porte sur `openqiara-claude-update-v1\n` suivi du fichier `update.json` **tel quel, octet pour octet** :
-  ne jamais le rééditer à la main après la signature.
+  ne jamais le rééditer à la main après la signature. La caméra le lit strictement : un seul objet JSON en UTF-8,
+  les seules clés ci-dessus (casse exacte), chacune une fois, rien après. `version` : 1 à 64 caractères imprimables.
 
 ## La clé de signature
 
@@ -139,7 +153,9 @@ Quatre entités de diagnostic, **seulement une fois une clé gravée** : « Mise
 À jour, En attente, Installation en essai, Installée, Retour arrière, Signature refusée, Version refusée, Dépôt injoignable,
 Erreur), « Version signée en service » (`seq`), « Dernière version signée vue », « Dernière vérification ». Le détail
 (`status.message`, `pending_seq`, `failed_seq`) est dans `GET /api/v1/update/signed`. La mémoire est dans
-`/data/qp/sigupdate.json` (quelques écritures par version). Le paquet `home-assistant/packages/openqiara_claude_v17_mise_a_jour_signee.yaml`
+`/data/qp/sigupdate.json` (une écriture par vérification, écrite puis synchronisée sur la carte). L'effacer fait
+oublier le plus grand `seq` vu, les versions revenues en arrière ou quittées : à ne faire que pour réautoriser
+sciemment une version écartée. Le paquet `home-assistant/packages/openqiara_claude_v17_mise_a_jour_signee.yaml`
 notifie l'essai, l'installation, le retour arrière et les refus.
 
 ## Ce que ça ne couvre pas
@@ -149,7 +165,11 @@ notifie l'essai, l'installation, le retour arrière et les refus.
 - Pas de vérification d'un flux vidéo en cours avant la relance : seules l'alarme, l'essai en cours et l'état de
   QIARA Plus sont contrôlés. La relance coupe le flux quelques secondes.
 - Un seul propriétaire de clé : celui qui la détient peut signer.
-- Il faut un accès HTTPS à `github.com` depuis la caméra (c'est déjà celui de l'OTA de l'amont).
+- Il faut un accès HTTPS à `github.com` depuis la caméra (c'est déjà celui de l'OTA de l'amont), et une horloge
+  réglée (NTP) : avant, les certificats sont refusés et la vérification échoue (`echec-reseau`).
+- Construire la version de livraison avec la **dernière version corrective de Go 1.26** (1.26.11 au 21/11/2026) :
+  la 1.26.1 a des failles connues dans `crypto/x509`, `crypto/tls` et `net/http` atteignables par ce client HTTPS
+  (rapport `govulncheck`).
 - Aucune installation de la V17 sur une vraie caméra n'a été faite par ce chantier : voir la note d'état.
 
 ## Dépannage
@@ -161,8 +181,8 @@ notifie l'essai, l'installation, le retour arrière et les refus.
 | `echec-reseau` | dépôt injoignable, fichier absent (release sans `update.json`), réponse trop grosse, somme ou taille du binaire différentes de celles signées |
 | `echec-signature` | signature absente, fausse, ou clé non gravée |
 | `refusee` | canal différent, `seq` plus ancien que le plus récent vu, `min_seq` non atteint, version déjà revenue en arrière |
-| `attente` | alarme armée ou état inconnu, essai de QIARA Plus en cours, QIARA Plus absent, place insuffisante |
+| `attente` | alarme armée ou état inconnu, essai de QIARA Plus en cours, QIARA Plus absent ou incomplet, place insuffisante ou illisible, relance non faite par QIARA Plus (essai annulé) |
 | `installation` | version déposée chez QIARA Plus ; essai en cours |
-| `installee` / `retour-arriere` | issue de l'essai, constatée à la vérification suivante |
+| `installee` / `retour-arriere` | issue de l'essai, constatée au démarrage suivant ou à la vérification suivante ; `retour-arriere` aussi quand on est revenu à une version antérieure (bouton, réinstallation) |
 
 Journal : lignes « mise à jour signée » du journal d'openqiarad ; côté QIARA Plus : `qp-update status`.
