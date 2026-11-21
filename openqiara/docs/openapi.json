@@ -1429,8 +1429,7 @@
                       "status": {
                         "active": false,
                         "keys": 0,
-                        "running_seq": 0,
-                        "result": "pas-de-cle"
+                        "running_seq": 0
                       }
                     }
                   }
@@ -3318,7 +3317,8 @@
           },
           "repo": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+            "description": "`propriétaire/dépôt` GitHub ; vide pour l'effacer (refusé si `enabled` est ou devient vrai).",
+            "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]{0,38}/[A-Za-z0-9._-]{1,100}$"
           },
           "channel": {
             "type": "string",
