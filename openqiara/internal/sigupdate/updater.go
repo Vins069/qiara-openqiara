@@ -192,14 +192,18 @@ func (u *Updater) note(code, msg string, checked bool) string {
 
 // reconcile rapproche l'installation en cours de ce qui tourne. Sous chk.
 func (u *Updater) reconcile() {
+	trial := u.Trial != nil && u.Trial()
 	p := u.st.PendingSeq
 	if p == 0 {
+		u.reconcileRunning(trial)
 		return
 	}
-	trial := u.Trial != nil && u.Trial()
 	switch {
 	case u.RunningSeq >= p && !trial:
 		u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = 0, "", time.Time{}
+		if u.RunningSeq > u.st.InstalledSeq {
+			u.st.InstalledSeq = u.RunningSeq
+		}
 		u.note(ResInstalled, fmt.Sprintf("version signée %d en service", u.RunningSeq), false)
 	case trial:
 		u.note(ResInstalling, fmt.Sprintf("version signée %d : essai de QIARA Plus en cours", p), false)
@@ -209,6 +213,29 @@ func (u *Updater) reconcile() {
 		}
 		u.st.PendingSeq, u.st.PendingSHA, u.st.PendingAt = 0, "", time.Time{}
 		u.note(ResRolledBack, fmt.Sprintf("la version signée %d n'a pas passé l'essai : QIARA Plus est revenu en arrière, elle ne sera pas réessayée", p), false)
+	}
+}
+
+// reconcileRunning, hors installation en cours : retient le plus grand seq constaté en service et
+// reconnaît qu'on l'a quitté (bouton « version précédente », réinstallation à la main, repli de
+// QIARA Plus). Sans cela, la vérification suivante réinstallerait la version qu'on vient d'écarter.
+// Pendant un essai (installation à la main), rien n'est conclu. Sous chk.
+func (u *Updater) reconcileRunning(trial bool) {
+	switch {
+	case trial:
+	case u.RunningSeq > u.st.InstalledSeq:
+		u.st.InstalledSeq = u.RunningSeq
+		if err := saveState(u.StatePath, u.st); err != nil {
+			u.logger().Warn("mise à jour signée : état non enregistré", "error", err)
+		}
+		u.publish()
+	case u.RunningSeq < u.st.InstalledSeq:
+		gone := u.st.InstalledSeq
+		if gone > u.st.FailedSeq {
+			u.st.FailedSeq = gone
+		}
+		u.st.InstalledSeq = u.RunningSeq
+		u.note(ResRolledBack, fmt.Sprintf("la version signée %d a été quittée (version %d en service : version précédente, réinstallation à la main ou repli de QIARA Plus) : elle ne sera pas réinstallée, il faut publier un seq supérieur", gone, u.RunningSeq), false)
 	}
 }
 

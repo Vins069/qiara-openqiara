@@ -20,6 +20,10 @@ type State struct {
 	PendingSHA  string    `json:"pending_sha,omitempty"`
 	PendingAt   time.Time `json:"pending_at,omitempty"`
 	FailedSeq   int64     `json:"failed_seq,omitempty"` // plus grand seq revenu en arrière : jamais réessayé
+	// InstalledSeq : plus grand seq constaté en service (hors essai). Une version qui tourne avec un seq
+	// inférieur signifie qu'on l'a quittée (bouton « version précédente » de QIARA Plus, réinstallation à
+	// la main, repli de QIARA Plus) : elle n'est alors pas réinstallée automatiquement.
+	InstalledSeq int64 `json:"installed_seq,omitempty"`
 }
 
 // Codes de résultat.
